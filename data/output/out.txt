@@ -1,0 +1,61 @@
+[
+  {
+    "prompt": "Reverse the string 'world'",
+    "name": "fn_reverse_string",
+    "parameters": {
+      "s": "world"
+    }
+  },
+  {
+    "prompt": "Greet shrek",
+    "name": "fn_get_square_root",
+    "parameters": {
+      "a": null
+    }
+  },
+  {
+    "prompt": "Greet john",
+    "name": "fn_greet",
+    "parameters": {
+      "name": "Hello, John"
+    }
+  },
+  {
+    "prompt": "Reverse the string 'hello'",
+    "name": "fn_reverse_string",
+    "parameters": {
+      "s": "hello"
+    }
+  },
+  {
+    "prompt": "Replace all numbers in \"Hello 34 I'm 233 years old\" with NUMBERS",
+    "name": "None",
+    "parameters": {}
+  },
+  {
+    "prompt": "Replace all vowels in 'Programming is fun' with asterisks",
+    "name": "fn_substitute_string_with_regex",
+    "parameters": {
+      "source_string": "Programming is fun",
+      "regex": "program*ing is*fun",
+      "replacement": "*******Programming is fun"
+    }
+  },
+  {
+    "prompt": "Substitute the word 'cat' with 'dog' in 'The cat sat on the mat with another cat'",
+    "name": "fn_substitute_string_with_regex",
+    "parameters": {
+      "source_string": "The source string is: 'The cat sat on the mat with another cat",
+      "regex": "The dog sat on the mat with another dog",
+      "replacement": "dog"
+    }
+  },
+  {
+    "prompt": "whats the uppercase of 'hello world'",
+    "name": "fn_toggle_case",
+    "parameters": {
+      "text": "hello world",
+      "to_upper": true
+    }
+  }
+]

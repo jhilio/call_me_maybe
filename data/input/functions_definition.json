@@ -1,0 +1,98 @@
+[
+  {
+    "name": "fn_toggle_case",
+    "description": "Convert a string to uppercase or lowercase depending on a boolean flag. If 'to_upper' is true, the string is converted to uppercase; if false, it is converted to lowercase.",
+    "parameters": {
+      "text": {
+        "type": "string"
+      },
+      "to_upper": {
+        "type": "boolean"
+      }
+    },
+    "returns": {
+      "type": "string"
+    }
+  },
+  {
+    "name": "fn_is_pair",
+    "description": "Check if a number is even. Returns true if the number is even, false otherwise.",
+    "parameters": {
+      "a": {
+        "type": "number"
+      }
+    },
+    "returns": {
+      "type": "boolean"
+    }
+  },
+  {
+    "name": "fn_add_numbers",
+    "description": "Add two numbers together and return their sum.",
+    "parameters": {
+      "a": {
+        "type": "number"
+      },
+      "b": {
+        "type": "number"
+      }
+    },
+    "returns": {
+      "type": "number"
+    }
+  },
+  {
+    "name": "fn_greet",
+    "description": "Generate a greeting message for a person by name.",
+    "parameters": {
+      "name": {
+        "type": "string"
+      }
+    },
+    "returns": {
+      "type": "string"
+    }
+  },
+  {
+    "name": "fn_reverse_string",
+    "description": "Reverse a string and return the reversed result.",
+    "parameters": {
+      "s": {
+        "type": "string"
+      }
+    },
+    "returns": {
+      "type": "string"
+    }
+  },
+  {
+    "name": "fn_get_square_root",
+    "description": "Calculate the square root of a number.",
+    "parameters": {
+      "a": {
+        "type": "number"
+      }
+    },
+    "returns": {
+      "type": "number"
+    }
+  },
+  {
+    "name": "fn_substitute_string_with_regex",
+    "description": "Replace all occurrences matching a regex pattern in a string.",
+    "parameters": {
+      "source_string": {
+        "type": "string"
+      },
+      "regex": {
+        "type": "string"
+      },
+      "replacement": {
+        "type": "string"
+      }
+    },
+    "returns": {
+      "type": "string"
+    }
+  }
+]

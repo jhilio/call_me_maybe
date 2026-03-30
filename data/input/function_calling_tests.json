@@ -1,0 +1,27 @@
+[
+  {
+    "prompt": "Reverse the string 'world'"
+  },
+  {
+    "prompt": "Greet shrek"
+  },
+  {
+    "prompt": "Greet john"
+  },
+  {
+    "prompt": "Reverse the string 'hello'"
+  },
+  {
+    "prompt": "Replace all numbers in \"Hello 34 I'm 233 years old\" with NUMBERS"
+  },
+  {
+    "prompt": "Replace all vowels in 'Programming is fun' with asterisks"
+  },
+  {
+    "prompt": "Substitute the word 'cat' with 'dog' in 'The cat sat on the mat with another cat'"
+  },
+  {
+    "prompt": "whats the uppercase of 'hello world'"
+  }
+
+]
