@@ -1,3 +1,5 @@
+from hmac import new
+
 from llm_sdk import Small_LLM_Model
 from math import exp
 import random
@@ -54,30 +56,44 @@ def phrase_only_rd(
     return llm.decode(current_output)
 
 
-def free_text_rd(prompt: str, llm, max_len: int = 50, temperature: float = 0.5) -> str:
+def free_text_rd(
+        prompt: str, llm, max_len: int = 10,
+        focus_text: str | None = None,
+        boost_tokens: list[int] | None = None):
     """
-    Token-by-token free decoding: almost free speech, using logits from LLM.
-    No strict allowed tokens, just guided by pre-prompt.
+    Extract text deterministically from LLM logits.
+    
+    Args:
+        prompt: Full system/user prompt
+        llm: Your LLM object
+        max_len: Maximum tokens to decode
+        focus_text: Optional string to bias token selection toward
     """
-    input_ids = llm.encode(prompt).tolist()[0]  # initial prompt tokens
+    input_ids = llm.encode(prompt).tolist()[0]
     current_output = []
 
+    # compute bias tokens only from focus_text
+    if focus_text:
+        focus_ids = set(llm.encode(focus_text).tolist()[0])
+    else:
+        focus_ids = set(input_ids)
+    # optional: boost special constants
+    # print(prompt)
     for _ in range(max_len):
         logits = llm.get_logits_from_input_ids(input_ids + current_output)
-        # numerically stable softmax
-        max_logit = max(logits)
-        weights = [exp((l - max_logit) / temperature) for l in logits]
-        total = sum(weights)
-        probs = [w / total for w in weights]
-        # sample the next token
-        next_token = random.choices(range(len(probs)), weights=probs)[0]
-        new = llm.decode(next_token)
-        # stop at special token (like end-of-text)
-        if any([char in ('.', '?', '!', '\n') for char in new]):
-            break
+        # bias logits toward focus_text tokens
+        for token_id in focus_ids:
+            logits[token_id] += 2.5
+        if boost_tokens:
+            for token_id in boost_tokens:
+                logits[token_id] += 10  # stronger boost
+        # deterministic argmax
+        next_token = max(range(len(logits)), key=lambda i: logits[i])
         current_output.append(next_token)
+        decoded = llm.decode(current_output)
+        if "\n" in decoded:
+            break
     return llm.decode(current_output)
-
 
 def restrained_decoding_number(
     prompt: str,
