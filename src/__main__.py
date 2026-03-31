@@ -17,10 +17,9 @@ def main():
     with open("data/input/functions_definition.json") as file:
         content = file.read()
     data = json.loads(content)
-
-    # fn_names.append("None")
     future_json = []
     prompts_list = get_prompt()
+
     for prompt in prompts_list:
         act_call = FunctionCall(llm, data, prompt)
         print(f"resolving prompt : {prompt}")

@@ -1,8 +1,21 @@
-from hmac import new
+
+from sympy import quo
 
 from llm_sdk import Small_LLM_Model
-from math import exp
+from math import exp, sqrt
 import random
+import re
+
+def find_closing_quote_in_text(decoded_text):
+    """
+    Returns True if a quote is followed by a space or newline.
+    """
+    for match in re.finditer(r"[\"']", decoded_text):
+        idx = match.end()  # position right after the quote
+        if idx < len(decoded_text) and decoded_text[idx] in (" ", "\n"):
+            return (True, idx)
+    return (False, 0)
+
 
 def get_compatible_next_tokens(current_output, allowed_token_phrases):
     # returns set of token IDs allowed as the next token
@@ -27,8 +40,8 @@ def phrase_only_rd(
     allowed_token_ids = [llm.encode(string).tolist()[0] for string in allowed]
     input_token = llm.encode(prompt).tolist()[0]
     current_output = []
-    if verbose:
-        print(prompt)
+    # if verbose:
+        # print(prompt)
     while (allowed_next := get_compatible_next_tokens(
         current_output, allowed_token_ids)):
         if not allowed_next:
@@ -49,6 +62,8 @@ def phrase_only_rd(
             margin = sorted_probs[0] - sorted_probs[1]
         else:
             margin = 1.0  # only one option
+        if verbose:
+            print(f"{margin=}")
         if margin < acceptable_margin:   # tune this (0.1–0.3 usually good)
             return "None"
         if max_token:
@@ -60,10 +75,13 @@ def phrase_only_rd(
 
 
 def free_text_rd(
-        prompt: str, llm, max_len: int = 10,
+        prompt: str,
+        llm,
+        max_len: int = 10,
         focus_text: str | None = None,
-        boost_tokens: list[int] | None = None,
-        acceptable_margin=0.2):
+        boost_tokens: list[list[int]] | None = None,
+        acceptable_margin=0.2,
+        verbose: bool=False) -> str:
     """
     Extract text deterministically from LLM logits.
     
@@ -75,7 +93,7 @@ def free_text_rd(
     """
     input_ids = llm.encode(prompt).tolist()[0]
     current_output = []
-
+    current_text = ""
     # compute bias tokens only from focus_text
     if focus_text:
         focus_ids = set(llm.encode(focus_text).tolist()[0])
@@ -89,13 +107,31 @@ def free_text_rd(
         for token_id in focus_ids:
             logits[token_id] += 2.5
         if boost_tokens:
-            for token_id in boost_tokens:
-                logits[token_id] += 10  # stronger boost
+            boost_strength = 15
+            for phrase in boost_tokens:
+                if not current_output:
+                    logits[phrase[0]] += boost_strength* sqrt(len(llm.decode(phrase)))
+                    if verbose:
+                        print(f"={current_text}=, boost {llm.decode(phrase[0])}")
+                else:
+                    last_token = current_output[-1]
+
+                    if last_token in phrase:
+                        idx = phrase.index(last_token)
+                        if idx < len(phrase) - 1:
+                            next_token = phrase[idx + 1]
+                            logits[next_token] += boost_strength
+                        if verbose:
+                                print(f"={current_text}=, boost {llm.decode(next_token)}")
         # deterministic argmax
         next_token = max(range(len(logits)), key=lambda i: logits[i])
         current_output.append(next_token)
         current_text = llm.decode(current_output)
-        if "\n" in current_text or current_text.count("'") > 1 or  current_text.count('"') > 1:
+        if (quote :=find_closing_quote_in_text(current_text))[0] or "\n" in current_text:
+            if verbose:
+                print(f"break with {current_text}, {quote=}")
+            if quote[0]:
+                current_text = current_text[0:quote[1]]
             break
     return current_text
 

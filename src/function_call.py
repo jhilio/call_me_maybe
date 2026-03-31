@@ -1,7 +1,6 @@
 
 
-from queue import Empty
-
+from typing import Any
 from llm_sdk import Small_LLM_Model
 from restrained_decoding import phrase_only_rd, free_text_rd, restrained_decoding_number
 import re
@@ -37,6 +36,7 @@ class FunctionCall:
         "Actual parameter_state: {param_state}\n"
         "Parameter name you're filling: {param_name}\n"
         "Expected type: boolean\n"
+        "fill the parameter according to function definition and the user request\n\n"
     ),
     "string": (
         "Function: {func[name]}\n"
@@ -45,10 +45,10 @@ class FunctionCall:
         "Parameter: {param_name}\n"
         "Type: string\n"
         "Request: {prompt}\n\n"
-        "Extract ONLY the original value for this parameter from the request.\n"
-        "Do NOT apply the function."
-        "do not quote or tell any context arround the value"
-        "Finish with a new line at the end"
+        "Rules :\n"
+        "   Do NOT apply the function.\n"
+        "   Do NOT repeat previous parameter values.\n"
+        "   Finish your response by a new line.\n\n"
     ),
 }
     def __init__(self, llm: Small_LLM_Model, func_data: list[dict], prompt: str):
@@ -75,11 +75,12 @@ class FunctionCall:
         post_prompt = "Function router:"
         if self.prompt.strip():
             self.function_name = phrase_only_rd(
-                base_prompt + self.prompt + post_prompt, allowed, self.llm, temperature, acceptable_margin=0.3, max_token=True)
+                base_prompt + self.prompt + post_prompt, allowed, self.llm, temperature, acceptable_margin=0.1, max_token=True)
         else:
             self.function_name = "None"
 
     def get_param(self):
+        MAX_TRY = 5
         try:
             func = [func for func in self.func_data if func["name"] == self.function_name][0]
         except IndexError:
@@ -100,15 +101,16 @@ class FunctionCall:
             )
             retry_context = ""
             i = 0
-            for i in range(5):
+            for i in range(MAX_TRY):
                 full_prompt = base_prompt + retry_context + "parameter value:"
-                self.set_param(param_type, param_name, full_prompt)
-                if self.judge_param(func, param_name):
+                param_try = self.set_param(param_type, param_name, full_prompt)
+                if self.judge_param(func, param_name, param_try):
+                    self.parameter[param_name] = param_try
                     break
-                if i < 4:
+                if i < MAX_TRY - 1:
                     commentary_prompt = (
                         f"Provide a short commentary on why the parameter '{param_name}' with "
-                        f"value '{self.parameter[param_name]}' might not be a valid output for the user prompt:\n"
+                        f"value '{param_try}' might not be a valid output for the user prompt:\n"
                         f"'{self.prompt}' and provide detailed advice on how to fix it\n"
                         "simply end the comentary with a new line at the end if the comentary seems finnished\n\n"
                         "Commentary: "
@@ -120,73 +122,79 @@ class FunctionCall:
                         
                     )
             
-    def judge_param(self, func_def: dict, param_name: str):
+    def judge_param(self, func_def: dict, param_name: str, param_value: Any):
         allowed_string = ["yes", "no"]
-        param_value = self.parameter.get(param_name, None)
         if param_value is None:
             return False
-        judge_prompt =judge_prompt = f"""
-        Parameter name: {param_name}
+        judge_prompt = f"""
+Function:
+{func_def}
 
-        Function:
-        {func_def['description']}, {func_def['parameters']}
+Actual parameter state:
+{self.parameter}
 
-        User request:
-        {self.prompt}
+User request:
+{self.prompt}
 
-        Candidate value:
-        '{param_value}'
+Candidate value:
+'{param_value}'
 
-        Question:
-        Is the candidate value exactly the value that should be assigned to the parameter "{param_name}"?
-        
-        A value is WRONG if:
-        - It does not exactly match what the parameter should contain
-        - It includes extra words or context
-        - It corresponds to a different parameter
-        Answer strictly with "yes" or "no".
+Task:
+Decide if the candidate value EXACTLY matches the expected value for parameter "{param_name}".
 
-        Final answer:
-        """
+Rules:
+1. The candidate must match perfectly in content, format, and context. ANY deviation or ambiguity → no.
+2. If the candidate contains extra words, characters, or formatting, it is incorrect.
+3. If this value is already used for another parameter, it is incorrect.
 
+Strong instruction: Only answer "yes" if you are 90% certain the value is correct. Otherwise, answer "no".
+
+Final answer:
+"""
         value_output = phrase_only_rd(
-            judge_prompt, 
-            allowed_string, self.llm, acceptable_margin=0, max_token=True)
-        print(f"judgement result for {param_name} [{self.parameter[param_name]}]:{value_output}")
+            judge_prompt,
+            allowed_string, self.llm, acceptable_margin=0, max_token=True, verbose=True)
+        print(f"judgement result for {param_name} [{param_value}]:{value_output}")
         if value_output == "yes":
             return True
         return False
 
     def set_param(self, param_type, param_name, full_prompt):
-        CONSTANTS = {
-            "vowels": "aeiou",
-            "asterisk": "*",
-            "numbers": "-?\\d+\\.?\\d*"
+        REGEX = {
+            "vowels": "[aeiou]\n",
+            "numbers": "-?\\d+"
         }
+        REPLACEMENT = {
+            "asterisk": "*\n"
+        }
+        BIASED = {"regex": REGEX, "replacement": REPLACEMENT}
+
+        result = None
         if param_type == "number":
-            
-            numbers_in_prompt = [x for x in extract_numbers(self.prompt) if x not in self.parameter.values()]
+            numbers_in_prompt = [x for x in extract_numbers(self.prompt) if float(x) not in self.parameter.values()]
             value_output = restrained_decoding_number(full_prompt, numbers_in_prompt, self.llm)
             try:
-                self.parameter[param_name] = float(value_output)
-                numbers_in_prompt.remove(value_output)
+                result = float(value_output)
             except Exception:
-                self.parameter[param_name] = None
+                result = None
         elif param_type == "boolean":
             allowed_string = ["true", "false"]
             value_output = phrase_only_rd(full_prompt, allowed_string, self.llm, max_token=True)
             val = value_output.strip().lower()
             if val == "true":
-                self.parameter[param_name] = True
+                result = True
             else:
-                self.parameter[param_name] = False
+                result = False
         else:  # string or fallback
             boosted = []
-            for k, v in CONSTANTS.items():
-                if k in self.prompt:
-                    boosted.extend(self.llm.encode(v).tolist()[0])
-            value_output = free_text_rd(full_prompt, self.llm, max_len=20, focus_text=self.prompt, boost_tokens=boosted)
-            self.parameter[param_name] = value_output.strip(" \n'\"")
+            for name, bias in BIASED.items():
+                if param_name == name:
+                    for k, v in bias.items():
+                        if k in self.prompt:
+                            boosted.append(self.llm.encode(v).tolist()[0])
+            value_output = free_text_rd(full_prompt + ('"' if "'" in self.prompt else "'"), self.llm, max_len=20, focus_text=self.prompt, boost_tokens=boosted)
+            result = value_output.strip(" \n'\"")
+        return result
 
     def to_dict(self):
         return {
