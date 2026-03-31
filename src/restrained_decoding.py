@@ -22,10 +22,13 @@ def phrase_only_rd(
         llm: Small_LLM_Model,
         temperature: int=0.7,
         acceptable_margin=0.5,
-        max_token=False) -> str:
+        max_token=False,
+        verbose=False) -> str:
     allowed_token_ids = [llm.encode(string).tolist()[0] for string in allowed]
     input_token = llm.encode(prompt).tolist()[0]
     current_output = []
+    if verbose:
+        print(prompt)
     while (allowed_next := get_compatible_next_tokens(
         current_output, allowed_token_ids)):
         if not allowed_next:
@@ -59,7 +62,8 @@ def phrase_only_rd(
 def free_text_rd(
         prompt: str, llm, max_len: int = 10,
         focus_text: str | None = None,
-        boost_tokens: list[int] | None = None):
+        boost_tokens: list[int] | None = None,
+        acceptable_margin=0.2):
     """
     Extract text deterministically from LLM logits.
     
@@ -90,16 +94,16 @@ def free_text_rd(
         # deterministic argmax
         next_token = max(range(len(logits)), key=lambda i: logits[i])
         current_output.append(next_token)
-        decoded = llm.decode(current_output)
-        if "\n" in decoded:
+        current_text = llm.decode(current_output)
+        if "\n" in current_text or current_text.count("'") > 1 or  current_text.count('"') > 1:
             break
-    return llm.decode(current_output)
+    return current_text
 
 def restrained_decoding_number(
     prompt: str,
     allowed_numbers: list[str],
     llm: Small_LLM_Model,
-    temperature: float = 0.01
+    temperature: float = 0.01,
 ) -> str:
     """
     Generate multiple tokens from the LLM using a restricted set of allowed tokens.

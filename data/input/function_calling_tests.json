@@ -1,5 +1,38 @@
 [
   {
+    "prompt": ""
+  },
+  {
+    "prompt": "afgagwsgfddfsdfefesf"
+  },
+  {
+    "prompt": "DONT CALL ANY FUNC"
+  },
+  {
+    "prompt": "What is the sum of 2 and 3?"
+  },
+  {
+    "prompt": "What is the sum of 265 and 345?"
+  },
+  {
+    "prompt": "What is the square root of 16?"
+  },
+  {
+    "prompt": "Calculate the square root of 144"
+  },
+  {
+    "prompt": "is 41 even ?"
+  },
+  {
+    "prompt": "What is the sum of 80 and -20"
+  },
+  {
+    "prompt": "What is the square root of 42"
+  },
+  {
+    "prompt": "What is the square root of 4"
+  },
+    {
     "prompt": "Reverse the string 'world'"
   },
   {
@@ -22,6 +55,8 @@
   },
   {
     "prompt": "whats the uppercase of 'hello world'"
+  },
+  {
+    "prompt": "whats the lowercase version of 'HELLO WORLD'"
   }
-
 ]

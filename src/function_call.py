@@ -28,10 +28,7 @@ class FunctionCall:
     "Rules:\n"
     "- Extract exactly ONE number from the user request.\n"
     "- If multiple numbers are present, choose the FIRST number from left to right.\n"
-    "- Do NOT invent or compute any number.\n"
-    "- Only use numbers explicitly written in the request.\n"
     "- If this number is already used in parameter_state, choose the next unused number.\n"
-    "- Output only the number, no text.\n"
     "- NEVER evaluate a result, simply extract values already in user request\n"
     ),
     "boolean": (
@@ -40,7 +37,6 @@ class FunctionCall:
         "Actual parameter_state: {param_state}\n"
         "Parameter name you're filling: {param_name}\n"
         "Expected type: boolean\n"
-        "Only return 'true' or 'false'. Do not add explanations.\n"
     ),
     "string": (
         "Function: {func[name]}\n"
@@ -51,6 +47,7 @@ class FunctionCall:
         "Request: {prompt}\n\n"
         "Extract ONLY the original value for this parameter from the request.\n"
         "Do NOT apply the function."
+        "do not quote or tell any context arround the value"
         "Finish with a new line at the end"
     ),
 }
@@ -78,7 +75,7 @@ class FunctionCall:
         post_prompt = "Function router:"
         if self.prompt.strip():
             self.function_name = phrase_only_rd(
-                base_prompt + self.prompt + post_prompt, allowed, self.llm, temperature, 0.4, True)
+                base_prompt + self.prompt + post_prompt, allowed, self.llm, temperature, acceptable_margin=0.3, max_token=True)
         else:
             self.function_name = "None"
 
@@ -103,35 +100,59 @@ class FunctionCall:
             )
             retry_context = ""
             i = 0
-            result = None
-            while not (result := self.judge_param(func, param_name)) and i < 5:
+            for i in range(5):
                 full_prompt = base_prompt + retry_context + "parameter value:"
                 self.set_param(param_type, param_name, full_prompt)
-                print(f"try {i}\n", "\n".join(f"{k}, {v}" for k,v in {
-                    "result": f"=={self.parameter[param_name]}==",
-                    "judgement": result,
-                    "context": retry_context
-                }.items()), "\n\n")
+                if self.judge_param(func, param_name):
+                    break
                 if i < 4:
                     commentary_prompt = (
                         f"Provide a short commentary on why the parameter '{param_name}' with "
                         f"value '{self.parameter[param_name]}' might not be a valid output for the user prompt:\n"
                         f"'{self.prompt}' and provide detailed advice on how to fix it\n"
+                        "simply end the comentary with a new line at the end if the comentary seems finnished\n\n"
                         "Commentary: "
                     )
                     retry_context = free_text_rd(
                         commentary_prompt,
                         self.llm,
                         max_len=50
+                        
                     )
-                i = i+1
             
     def judge_param(self, func_def: dict, param_name: str):
         allowed_string = ["yes", "no"]
         param_value = self.parameter.get(param_name, None)
         if param_value is None:
             return False
-        value_output = phrase_only_rd(f"does '{param_value}' fit the description of {func_def} parameter {param_name}", allowed_string, self.llm, acceptable_margin=0, max_token=True)
+        judge_prompt =judge_prompt = f"""
+        Parameter name: {param_name}
+
+        Function:
+        {func_def['description']}, {func_def['parameters']}
+
+        User request:
+        {self.prompt}
+
+        Candidate value:
+        '{param_value}'
+
+        Question:
+        Is the candidate value exactly the value that should be assigned to the parameter "{param_name}"?
+        
+        A value is WRONG if:
+        - It does not exactly match what the parameter should contain
+        - It includes extra words or context
+        - It corresponds to a different parameter
+        Answer strictly with "yes" or "no".
+
+        Final answer:
+        """
+
+        value_output = phrase_only_rd(
+            judge_prompt, 
+            allowed_string, self.llm, acceptable_margin=0, max_token=True)
+        print(f"judgement result for {param_name} [{self.parameter[param_name]}]:{value_output}")
         if value_output == "yes":
             return True
         return False
@@ -143,7 +164,8 @@ class FunctionCall:
             "numbers": "-?\\d+\\.?\\d*"
         }
         if param_type == "number":
-            numbers_in_prompt = extract_numbers(self.prompt)
+            
+            numbers_in_prompt = [x for x in extract_numbers(self.prompt) if x not in self.parameter.values()]
             value_output = restrained_decoding_number(full_prompt, numbers_in_prompt, self.llm)
             try:
                 self.parameter[param_name] = float(value_output)
@@ -152,7 +174,7 @@ class FunctionCall:
                 self.parameter[param_name] = None
         elif param_type == "boolean":
             allowed_string = ["true", "false"]
-            value_output = phrase_only_rd(full_prompt, allowed_string, self.llm)
+            value_output = phrase_only_rd(full_prompt, allowed_string, self.llm, max_token=True)
             val = value_output.strip().lower()
             if val == "true":
                 self.parameter[param_name] = True

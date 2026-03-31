@@ -1,5 +1,79 @@
 [
   {
+    "prompt": "",
+    "name": "None",
+    "parameters": {}
+  },
+  {
+    "prompt": "afgagwsgfddfsdfefesf",
+    "name": "None",
+    "parameters": {}
+  },
+  {
+    "prompt": "DONT CALL ANY FUNC",
+    "name": "None",
+    "parameters": {}
+  },
+  {
+    "prompt": "What is the sum of 2 and 3?",
+    "name": "fn_add_numbers",
+    "parameters": {
+      "a": 3.0,
+      "b": 3.0
+    }
+  },
+  {
+    "prompt": "What is the sum of 265 and 345?",
+    "name": "fn_add_numbers",
+    "parameters": {
+      "a": 345.0,
+      "b": 345.0
+    }
+  },
+  {
+    "prompt": "What is the square root of 16?",
+    "name": "fn_get_square_root",
+    "parameters": {
+      "a": 16.0
+    }
+  },
+  {
+    "prompt": "Calculate the square root of 144",
+    "name": "fn_get_square_root",
+    "parameters": {
+      "a": 144.0
+    }
+  },
+  {
+    "prompt": "is 41 even ?",
+    "name": "fn_is_pair",
+    "parameters": {
+      "a": 41.0
+    }
+  },
+  {
+    "prompt": "What is the sum of 80 and -20",
+    "name": "fn_add_numbers",
+    "parameters": {
+      "a": 80.0,
+      "b": 80.0
+    }
+  },
+  {
+    "prompt": "What is the square root of 42",
+    "name": "fn_get_square_root",
+    "parameters": {
+      "a": 42.0
+    }
+  },
+  {
+    "prompt": "What is the square root of 4",
+    "name": "fn_get_square_root",
+    "parameters": {
+      "a": 4.0
+    }
+  },
+  {
     "prompt": "Reverse the string 'world'",
     "name": "fn_reverse_string",
     "parameters": {
@@ -36,18 +110,18 @@
     "prompt": "Replace all vowels in 'Programming is fun' with asterisks",
     "name": "fn_substitute_string_with_regex",
     "parameters": {
-      "source_string": "Programming is fun' in the request.",
-      "regex": "aeiou*aeiou*aeiou*aeiou*aeiou*aeiou*aeiou",
-      "replacement": "aeiou*aeiou*aeiou*aeiou*aeiou*aeiou*ae"
+      "source_string": "Programming is fun",
+      "regex": "Programming is fun",
+      "replacement": "Programming is fun"
     }
   },
   {
     "prompt": "Substitute the word 'cat' with 'dog' in 'The cat sat on the mat with another cat'",
     "name": "fn_substitute_string_with_regex",
     "parameters": {
-      "source_string": "cat' in the 'source_string' parameter' in the request.",
-      "regex": "cat' in the 'regex' parameter' in the request.",
-      "replacement": "dog' in the 'regex' parameter' in the request.'."
+      "source_string": "The cat sat on the mat with another cat",
+      "regex": "cat",
+      "replacement": "dog"
     }
   },
   {
@@ -55,7 +129,15 @@
     "name": "fn_toggle_case",
     "parameters": {
       "text": "hello world",
-      "to_upper": true
+      "to_upper": false
+    }
+  },
+  {
+    "prompt": "whats the lowercase version of 'HELLO WORLD'",
+    "name": "fn_toggle_case",
+    "parameters": {
+      "text": "HELLO WORLD",
+      "to_upper": false
     }
   }
 ]
