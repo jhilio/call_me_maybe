@@ -5,8 +5,11 @@ from llm_sdk import Small_LLM_Model
 from restrained_decoding import phrase_only_rd, free_text_rd, restrained_decoding_number
 import re
 
-def extract_numbers(prompt: str) -> list[str]:
-    return re.findall(r"-?\d+\.?\d*", prompt)
+def extract_numbers(prompt: str, allow_float: bool=False) -> list[str]:
+    if allow_float:
+        return re.findall(r"-?\d+\.?\d*", prompt)
+    else:
+        return re.findall(r"(?<![\d.])-?\d+(?!\.\d)", prompt)
 
 def extract_words(text: str) -> list[str]:
     # Match sequences of letters, digits, or underscores
@@ -44,7 +47,7 @@ class FunctionCall:
         "Param_state: {param_state}\n"
         "Parameter: {param_name}\n"
         "Type: string\n"
-        "Request: {prompt}\n\n"
+        "Request: |\33[31m{prompt}\33[0m|\n\n"
         "Rules :\n"
         "   Do NOT apply the function.\n"
         "   Do NOT repeat previous parameter values.\n"
@@ -146,8 +149,7 @@ Rules:
 1. The candidate must match perfectly in content, format, and context. ANY deviation or ambiguity → no.
 2. If the candidate contains extra words, characters, or formatting, it is incorrect.
 3. If this value is already used for another parameter, it is incorrect.
-
-Strong instruction: Only answer "yes" if you are 90% certain the value is correct. Otherwise, answer "no".
+4. Only answer "yes" if you are 100% certain the value is correct. Otherwise, answer "no".
 
 Final answer:
 """
@@ -161,20 +163,36 @@ Final answer:
 
     def set_param(self, param_type, param_name, full_prompt):
         REGEX = {
-            "vowels": "[aeiou]\n",
-            "numbers": "-?\\d+"
+            "vowels": ["[aeiou]\n"],
+            "numbers": ["-?\\d+"]
         }
         REPLACEMENT = {
-            "asterisk": "*\n"
+            "asterisk": ["*\n"],
+            "numbers": ["NUMBERS"]
         }
-        BIASED = {"regex": REGEX, "replacement": REPLACEMENT}
+        QUERY = {
+            "query": ["SELECT",
+                  "*",
+                  "FROM"]
+        }
+        BIASED = {"regex": REGEX, "replacement": REPLACEMENT, "SQL": QUERY}
 
         result = None
         if param_type == "number":
-            numbers_in_prompt = [x for x in extract_numbers(self.prompt) if float(x) not in self.parameter.values()]
+            numbers_in_prompt = [x for x in extract_numbers(self.prompt, allow_float=True) if float(x) not in self.parameter.values()]
             value_output = restrained_decoding_number(full_prompt, numbers_in_prompt, self.llm)
             try:
                 result = float(value_output)
+            except Exception:
+                result = None
+        elif param_type == "integer":
+            numbers_in_prompt = extract_numbers(self.prompt, allow_float=True)
+            numbers_in_prompt = [float(x) if '.' in x else int(x) for x in numbers_in_prompt]
+            left_in_prompt = [str(x) for x in numbers_in_prompt if x not in self.parameter.values()]
+            print(left_in_prompt, [a for a in self.parameter.values()])
+            value_output = restrained_decoding_number(full_prompt, left_in_prompt, self.llm)
+            try:
+                result = int(value_output)
             except Exception:
                 result = None
         elif param_type == "boolean":
@@ -187,12 +205,26 @@ Final answer:
                 result = False
         else:  # string or fallback
             boosted = []
+            focus = {
+                    self.prompt: 1.35,
+                    self.function_name: 0.4,
+                    self.function_name.lower(): 0.4,
+                    "|".join([a for a in self.parameter.values()]): 0.2,
+                    param_name: 0.1,
+                    param_name.lower(): 0.1
+                }
             for name, bias in BIASED.items():
                 if param_name == name:
                     for k, v in bias.items():
                         if k in self.prompt:
-                            boosted.append(self.llm.encode(v).tolist()[0])
-            value_output = free_text_rd(full_prompt + ('"' if "'" in self.prompt else "'"), self.llm, max_len=20, focus_text=self.prompt, boost_tokens=boosted)
+                            boosted.extend(self.llm.encode(v).tolist()[0])
+            value_output = free_text_rd(
+                full_prompt + ('"' if "'" in self.prompt else "'"),
+                self.llm,
+                max_len=20,
+                focus_text=focus,
+                boost_tokens=boosted
+                )
             result = value_output.strip(" \n'\"")
         return result
 

@@ -78,7 +78,7 @@ def free_text_rd(
         prompt: str,
         llm,
         max_len: int = 10,
-        focus_text: str | None = None,
+        focus_text: dict[str, int] | None = None,
         boost_tokens: list[list[int]] | None = None,
         acceptable_margin=0.2,
         verbose: bool=False) -> str:
@@ -94,18 +94,17 @@ def free_text_rd(
     input_ids = llm.encode(prompt).tolist()[0]
     current_output = []
     current_text = ""
+    focus_ids= {}
     # compute bias tokens only from focus_text
-    if focus_text:
-        focus_ids = set(llm.encode(focus_text).tolist()[0])
-    else:
-        focus_ids = set(input_ids)
-    # optional: boost special constants
-    # print(prompt)
+    for text, value in focus_text.items():
+        for tok in set(llm.encode(text).tolist()[0]):
+            focus_ids[tok] = focus_ids.get(tok, 0) + value 
     for _ in range(max_len):
         logits = llm.get_logits_from_input_ids(input_ids + current_output)
         # bias logits toward focus_text tokens
-        for token_id in focus_ids:
-            logits[token_id] += 2.5
+        for token_id, boost_value in focus_ids.items():
+            logits[token_id] *= boost_value
+        
         if boost_tokens:
             boost_strength = 15
             for phrase in boost_tokens:
