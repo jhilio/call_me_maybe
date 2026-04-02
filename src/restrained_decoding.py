@@ -1,4 +1,6 @@
 
+from turtle import window_height
+
 from sympy import quo
 
 from llm_sdk import Small_LLM_Model
@@ -74,13 +76,13 @@ def phrase_only_rd(
     return llm.decode(current_output)
 
 
-def free_text_rd(
+def param_fill_rd(
         prompt: str,
         llm,
         max_len: int = 10,
-        focus_text: dict[str, int] | None = None,
+        focus_text: dict[str, int]={},
         boost_tokens: list[list[int]] | None = None,
-        acceptable_margin=0.2,
+        max_token: bool=True,
         verbose: bool=False) -> str:
     """
     Extract text deterministically from LLM logits.
@@ -91,6 +93,8 @@ def free_text_rd(
         max_len: Maximum tokens to decode
         focus_text: Optional string to bias token selection toward
     """
+    if not max_token:
+        print("fill param with a bit of random")
     input_ids = llm.encode(prompt).tolist()[0]
     current_output = []
     current_text = ""
@@ -122,8 +126,13 @@ def free_text_rd(
                             logits[next_token] += boost_strength
                         if verbose:
                                 print(f"={current_text}=, boost {llm.decode(next_token)}")
-        # deterministic argmax
-        next_token = max(range(len(logits)), key=lambda i: logits[i])
+        if max_token:
+            next_token = logits.index(max(logits))
+        else:
+            max_logit = max(logits)
+            weights = [exp(w - max_logit) for w in logits]
+            next_token = random.choices(population=list(range(len(logits))), weights=weights)[0]
+           
         current_output.append(next_token)
         current_text = llm.decode(current_output)
         if (quote :=find_closing_quote_in_text(current_text))[0] or "\n" in current_text:
@@ -170,54 +179,47 @@ def restrained_decoding_number(
     return llm.decode(current_output)
 
 
-
-
-
-# def restrained_decoding_string(prompt: str, llm, max_len: int = 50, temperature: float = 0.5, previous_strings=None) -> str:
-#     """
-#     Token-by-token string decoding:
-#     - Constrains to prompt substrings when possible
-#     - Allows free generation otherwise
-#     """
-#     previous_strings = previous_strings or []
-#     input_ids = llm.encode(prompt).tolist()[0]
-#     current_output = []
-
-#     prompt_tokens = llm.encode(prompt).tolist()[0]
-
-#     for _ in range(max_len):
-#         logits = llm.get_logits_from_input_ids(input_ids + current_output)
-
-#         # Determine compatible next tokens
-#         # 1. Tokens that continue a substring of the prompt
-#         compatible_next = []
-#         prefix_len = len(current_output)
-#         for i in range(len(prompt_tokens)):
-#             if prompt_tokens[i:i+prefix_len] == current_output[-prefix_len:]:
-#                 if i + prefix_len < len(prompt_tokens):
-#                     compatible_next.append(prompt_tokens[i+prefix_len])
-
-#         # 2. If no compatible_next, fallback to all vocab
-#         allowed_next = compatible_next if compatible_next else list(range(len(logits)))
-
-#         # Softmax sampling
-#         max_logit = max([logits[t] for t in allowed_next])
-#         weights = [exp((logits[t]-max_logit)/temperature) for t in allowed_next]
-#         total = sum(weights)
-#         probs = [w/total for w in weights]
-
-#         next_token = random.choices(allowed_next, weights=probs)[0]
-#         decoded_next = llm.decode([next_token])
-
-#         # Stop if sentence-ending token
-#         if any(c in ('.', '?', '!', '\n') for c in decoded_next):
-#             break
-
-#         current_output.append(next_token)
-
-#         # Avoid duplicating previously extracted strings
-#         current_str = llm.decode(current_output)
-#         if current_str in previous_strings:
-#             break
-
-#     return llm.decode(current_output)
+def free_commentary(
+   prompt: str,
+        llm,
+        max_len: int = 10,
+        focus_text: dict[str, int]={},
+        max_token: bool=False,
+        verbose: bool=False) -> str:
+    """
+    Extract text deterministically from LLM logits.
+    
+    Args:
+        prompt: Full system/user prompt
+        llm: Your LLM object
+        max_len: Maximum tokens to decode
+        focus_text: Optional string to bias token selection toward
+    """
+    input_ids = llm.encode(prompt).tolist()[0]
+    current_output = []
+    current_text = ""
+    focus_ids= {}
+    # compute bias tokens only from focus_text
+    for text, value in focus_text.items():
+        for tok in set(llm.encode(text).tolist()[0]):
+            focus_ids[tok] = focus_ids.get(tok, 0) + value 
+    for _ in range(max_len):
+        logits = llm.get_logits_from_input_ids(input_ids + current_output)
+        # bias logits toward focus_text tokens
+        for token_id, boost_value in focus_ids.items():
+            logits[token_id] *= boost_value
+        # deterministic argmax
+        if max_token:
+            next_token = logits.index(max(logits))
+        else:
+            max_logit = max(logits)
+            weights = [exp(w - max_logit) for w in logits]
+            next_token = random.choices(population=list(range(len(logits))), weights=weights)[0]
+        current_output.append(next_token)
+        current_text: str = llm.decode(current_output)
+        if "\n\n" in current_text or (current_text.__len__() > 100 and "\n" in current_text):
+            if verbose:
+                print(f"break with {current_text}")
+            current_text = current_text[0:current_text.rfind("\n")]
+            # break
+    return current_text

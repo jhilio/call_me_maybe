@@ -1,36 +1,87 @@
 [
   {
-    "prompt": "Replace all vowels in 'Programming is fun' with asterisks",
-    "name": "fn_substitute_string_with_regex",
+    "prompt": "What is the product of 3 and 5?",
+    "name": "fn_multiply_numbers",
     "parameters": {
-      "source_string": "Programming is fun",
-      "regex": "[aeiou]",
-      "replacement": "*"
+      "a": 3.0,
+      "b": 5.0
     }
   },
   {
-    "prompt": "Substitute the word 'cat' with 'dog' in 'The cat sat on the mat with another cat'",
-    "name": "fn_substitute_string_with_regex",
+    "prompt": "What is the product of 12 and 4?",
+    "name": "fn_multiply_numbers",
     "parameters": {
-      "source_string": "The cat sat on the mat with another cat",
-      "regex": "cat",
-      "replacement": "dog"
+      "a": 12.0,
+      "b": 4.0
     }
   },
   {
-    "prompt": "whats the uppercase of 'hello world'",
-    "name": "fn_toggle_case",
+    "prompt": "Is 4 an even number?",
+    "name": "fn_is_even",
     "parameters": {
-      "text": "hello world",
-      "to_upper": false
+      "n": 4
     }
   },
   {
-    "prompt": "whats the lowercase version of 'HELLO WORLD'",
-    "name": "fn_toggle_case",
+    "prompt": "Is 7 an even number?",
+    "name": "fn_is_even",
     "parameters": {
-      "text": "HELLO WORLD",
-      "to_upper": false
+      "n": 7
+    }
+  },
+  {
+    "prompt": "Calculate compound interest on 1234567.89 at 0.0375 rate for 23 years",
+    "name": "fn_calculate_compound_interest",
+    "parameters": {
+      "principal": 1234567.89,
+      "rate": 0.0375,
+      "years": 23
+    }
+  },
+  {
+    "prompt": "Execute SQL query 'SELECT * FROM users' on the production database",
+    "name": "fn_execute_sql_query",
+    "parameters": {
+      "query": "SELECT * FROM users",
+      "database": "production_database"
+    }
+  },
+  {
+    "prompt": "Run the query 'INSERT INTO logs VALUES (1, 2, 3)' on the system database",
+    "name": "fn_execute_sql_query",
+    "parameters": {
+      "query": "INSERT INTO logs VALUES (1, 2, 3)",
+      "database": "database\"'? Wait, the description says 'parameters': {'query': {'type': 'string'},"
+    }
+  },
+  {
+    "prompt": "Read the file at /home/user/data.json with utf-8 encoding",
+    "name": "fn_read_file",
+    "parameters": {
+      "path": "/home/user/data.json",
+      "encoding": "csv"
+    }
+  },
+  {
+    "prompt": "Read C:\\Users\\john\\config.ini with latin-1 encoding",
+    "name": "fn_read_file",
+    "parameters": {
+      "path": "config.ini",
+      "encoding": "config.ini', encoding: latin-1"
+    }
+  },
+  {
+    "prompt": "Format template: Hello {user}'s profile!",
+    "name": "fn_format_template",
+    "parameters": {
+      "template": "user"
+    }
+  },
+  {
+    "prompt": "Format template: Say \"hello\" to {name}",
+    "name": "fn_format_template",
+    "parameters": {
+      "template": "hello"
     }
   }
 ]

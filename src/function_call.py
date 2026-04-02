@@ -2,7 +2,7 @@
 
 from typing import Any
 from llm_sdk import Small_LLM_Model
-from restrained_decoding import phrase_only_rd, free_text_rd, restrained_decoding_number
+from restrained_decoding import free_commentary, phrase_only_rd, param_fill_rd, restrained_decoding_number
 import re
 
 def extract_numbers(prompt: str, allow_float: bool=False) -> list[str]:
@@ -42,7 +42,7 @@ class FunctionCall:
         "fill the parameter according to function definition and the user request\n\n"
     ),
     "string": (
-        "Function: {func[name]}\n"
+        "Function: {func}\n"
         "Description: {func[description]}\n"
         "Param_state: {param_state}\n"
         "Parameter: {param_name}\n"
@@ -106,62 +106,46 @@ class FunctionCall:
             i = 0
             for i in range(MAX_TRY):
                 full_prompt = base_prompt + retry_context + "parameter value:"
-                param_try = self.set_param(param_type, param_name, full_prompt)
+                # print(full_prompt)
+                param_try = self.set_param(param_type, param_name, full_prompt, random=bool(retry_context))
                 if self.judge_param(func, param_name, param_try):
-                    self.parameter[param_name] = param_try
                     break
                 if i < MAX_TRY - 1:
                     commentary_prompt = (
-                        f"Provide a short commentary on why the parameter '{param_name}' with "
-                        f"value '{param_try}' might not be a valid output for the user prompt:\n"
-                        f"'{self.prompt}' and provide detailed advice on how to fix it\n"
-                        "simply end the comentary with a new line at the end if the comentary seems finnished\n\n"
+                        "Context : \n"
+                        f"the value '{param_try}' is not a valid output for\n"
+                        f"parameter '{param_name}' in the function {func}for \n"
+                        f"the user prompt '{self.prompt}'\n\n"
+                        
+                        "your task is to descibe :\n"
+                        "A, why the value dont fit the argument needed for the user request \n"
+                        "B, quick advice on how to fix it (dont hesitate to simply say 'try another thing')\n"
+                        "rules :"
+                        "1 - dont cite this text"
+                        f"2 - be concise (30 to {40+i} word)"
+                        "3 - end the commentary with a new of line\n\n"
+                        "4 - double check your advice validity for B before telling them"
                         "Commentary: "
                     )
-                    retry_context = free_text_rd(
+                    retry_context = "advice from previous attempt : \n" + free_commentary(
                         commentary_prompt,
                         self.llm,
-                        max_len=50
-                        
+                        max_len=80
                     )
+                    print(f"\n\n\n\n\n{retry_context=}")
+            self.parameter[param_name] = param_try
+            print(f"validated parameter {param_name} to be {param_try}")
             
     def judge_param(self, func_def: dict, param_name: str, param_value: Any):
-        allowed_string = ["yes", "no"]
         if param_value is None:
             return False
-        judge_prompt = f"""
-Function:
-{func_def}
+        if isinstance(param_value, str) and param_value.strip().lower() == self.prompt.strip().lower():
+            return False
+        if param_value in self.parameter.values():
+            return False
+        return True
 
-Actual parameter state:
-{self.parameter}
-
-User request:
-{self.prompt}
-
-Candidate value:
-'{param_value}'
-
-Task:
-Decide if the candidate value EXACTLY matches the expected value for parameter "{param_name}".
-
-Rules:
-1. The candidate must match perfectly in content, format, and context. ANY deviation or ambiguity → no.
-2. If the candidate contains extra words, characters, or formatting, it is incorrect.
-3. If this value is already used for another parameter, it is incorrect.
-4. Only answer "yes" if you are 100% certain the value is correct. Otherwise, answer "no".
-
-Final answer:
-"""
-        value_output = phrase_only_rd(
-            judge_prompt,
-            allowed_string, self.llm, acceptable_margin=0, max_token=True, verbose=True)
-        print(f"judgement result for {param_name} [{param_value}]:{value_output}")
-        if value_output == "yes":
-            return True
-        return False
-
-    def set_param(self, param_type, param_name, full_prompt):
+    def set_param(self, param_type, param_name, full_prompt, random: bool=False):
         REGEX = {
             "vowels": ["[aeiou]\n"],
             "numbers": ["-?\\d+"]
@@ -189,7 +173,6 @@ Final answer:
             numbers_in_prompt = extract_numbers(self.prompt, allow_float=True)
             numbers_in_prompt = [float(x) if '.' in x else int(x) for x in numbers_in_prompt]
             left_in_prompt = [str(x) for x in numbers_in_prompt if x not in self.parameter.values()]
-            print(left_in_prompt, [a for a in self.parameter.values()])
             value_output = restrained_decoding_number(full_prompt, left_in_prompt, self.llm)
             try:
                 result = int(value_output)
@@ -206,10 +189,9 @@ Final answer:
         else:  # string or fallback
             boosted = []
             focus = {
-                    self.prompt: 1.35,
+                    self.prompt: 1.2,
                     self.function_name: 0.4,
                     self.function_name.lower(): 0.4,
-                    "|".join([a for a in self.parameter.values()]): 0.2,
                     param_name: 0.1,
                     param_name.lower(): 0.1
                 }
@@ -218,12 +200,13 @@ Final answer:
                     for k, v in bias.items():
                         if k in self.prompt:
                             boosted.extend(self.llm.encode(v).tolist()[0])
-            value_output = free_text_rd(
+            value_output = param_fill_rd(
                 full_prompt + ('"' if "'" in self.prompt else "'"),
                 self.llm,
                 max_len=20,
                 focus_text=focus,
-                boost_tokens=boosted
+                boost_tokens=boosted,
+                max_token=not random
                 )
             result = value_output.strip(" \n'\"")
         return result
@@ -234,3 +217,37 @@ Final answer:
             "func_name": self.function_name,
             "parameters": self.parameter
         }
+    
+
+
+
+#             checks = {
+#         "user_request": f"""
+# Candidate value '{param_value}' for parameter '{param_name}'.
+# User request: "{self.prompt}"
+
+# Choose the correct option:
+
+# A) The candidate correctly satisfies the user request
+# B) The candidate does not satisfy the user request
+
+# Answer ONLY "A" or "B".
+# Response : 
+# """
+#         }
+#         base_prompt = f"Function :\n{func_def}.\n"
+#         results = {}
+#         for check_name, prompt in checks.items():
+#             output = phrase_only_rd(base_prompt + prompt, allowed_string, self.llm,
+#                                     acceptable_margin=0, max_token=True)
+#             if output == "A":
+#                 output = "pass"
+#             if output == "B":
+#                 output = "blocked"
+#             results[check_name] = output
+#             # if output == "blocked" :
+#             print(f"{check_name} check for {param_name} [{param_value}]: {output}")
+
+#         # Final decision: must pass all checks
+#         if all(v == "pass" for v in results.values()):
+#             return True
