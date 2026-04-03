@@ -112,20 +112,26 @@ class FunctionCall:
                     break
                 if i < MAX_TRY - 1:
                     commentary_prompt = (
-                        "Context : \n"
-                        f"the value '{param_try}' is not a valid output for\n"
-                        f"parameter '{param_name}' in the function {func} for\n"
-                        f"the user prompt '{self.prompt}'\n\n"
-                        
-                        "your task is to descibe :\n"
-                        "A, why the value dont fit the argument needed for the user request \n"
-                        "B, quick advice on how to fix it\n"
-                        "Commentary: "
+                        f"Context:\n"
+                        f"'{param_try}' is invalid for '{param_name}' in {func}, "
+                        f"from prompt '{self.prompt}'.\n\n"
+                        "Do not change prompt casing.\n"
+                        "End with two empty lines.\n\n"
+                        "Explain:\n"
+                        "A. Why it's invalid\n"
+                        "B. How to fix it\n\n"
+                        "Explanation:"
                     )
                     retry_context = "advice from previous attempt : \n" + free_commentary(
                         commentary_prompt,
                         self.llm,
-                        max_len=80
+                        focus_text={
+                            param_try: 1.0,
+                            param_name: 1.0,
+                            self.prompt: 1.0
+                        },
+                        max_token=True,
+                        max_len=60
                     ).strip("\n") + "\n\n"
                     print(f"\n\n\n\n\n{retry_context=}")
             self.parameter[param_name] = param_try
@@ -137,6 +143,8 @@ class FunctionCall:
         if isinstance(param_value, str) and param_value.strip().lower() == self.prompt.strip().lower():
             return False
         if param_value in self.parameter.values():
+            return False
+        if param_value in self.parameter.keys():
             return False
         return True
 
@@ -195,15 +203,24 @@ class FunctionCall:
                     for k, v in bias.items():
                         if k in self.prompt:
                             boosted.extend(self.llm.encode(v).tolist()[0])
+            final_prompt = full_prompt + ('"' if "'" in self.prompt else "'")
             value_output = param_fill_rd(
-                full_prompt + ('"' if "'" in self.prompt else "'"),
+                final_prompt,
                 self.llm,
                 max_len=20,
                 focus_text=focus,
                 boost_tokens=boosted,
                 max_token=not random
                 )
-            result = value_output.strip(" \n'\"")
+            result = value_output.strip(" \n")
+            while True:
+                if (result[0] == '"' or final_prompt[-1] == '"') and result[-1] == '"':
+                    result = result.strip('"')
+                elif (result[0] == "'" or final_prompt[-1] == "'") and result[-1] == "'":
+                    result = result.strip("'")
+                else:
+                    break
+
         return result
 
     def to_dict(self):
@@ -213,7 +230,6 @@ class FunctionCall:
             "parameters": self.parameter
         }
     
-
 
 
 #             checks = {

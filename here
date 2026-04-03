@@ -19,7 +19,7 @@
     "prompt": "Greet shrek",
     "name": "fn_greet",
     "parameters": {
-      "name": "Shrek"
+      "name": "shrek"
     }
   },
   {

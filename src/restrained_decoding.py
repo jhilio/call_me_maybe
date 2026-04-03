@@ -204,6 +204,8 @@ def free_commentary(
         # bias logits toward focus_text tokens
         for token_id, boost_value in focus_ids.items():
             logits[token_id] *= boost_value
+        for i, token in enumerate(current_output): # dont repeat rule
+            logits[token] *= (0.8 * (i / len(current_output)))
         # deterministic argmax
         if max_token:
             next_token = logits.index(max(logits))
@@ -217,5 +219,5 @@ def free_commentary(
             if verbose:
                 print(f"break with {current_text}")
             current_text = current_text[0:current_text.rfind("\n")]
-            # break
+            break
     return current_text
