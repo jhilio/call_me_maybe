@@ -108,7 +108,7 @@ class FunctionCall:
                 full_prompt = base_prompt + retry_context + "parameter value:"
                 # print(full_prompt)
                 param_try = self.set_param(param_type, param_name, full_prompt, random=bool(retry_context))
-                if self.judge_param(func, param_name, param_try):
+                if self.judge_param(param_try):
                     break
                 if i < MAX_TRY - 1:
                     commentary_prompt = (
@@ -136,7 +136,7 @@ class FunctionCall:
             self.parameter[param_name] = param_try
             print(f"validated parameter {param_name} to be {param_try}")
             
-    def judge_param(self, func_def: dict, param_name: str, param_value: Any):
+    def judge_param(self, param_value: Any):
         if param_value is None:
             return False
         if isinstance(param_value, str) and param_value.strip().lower() == self.prompt.strip().lower():

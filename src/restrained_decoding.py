@@ -1,8 +1,4 @@
 
-from turtle import window_height
-
-from sympy import quo
-
 from llm_sdk import Small_LLM_Model
 from math import exp, sqrt
 import random
