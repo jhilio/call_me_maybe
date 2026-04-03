@@ -43,7 +43,7 @@
     "name": "fn_execute_sql_query",
     "parameters": {
       "query": "SELECT * FROM users",
-      "database": "production_database"
+      "database": "query\": \"SELECT * FROM users\", database: \"production database"
     }
   },
   {
@@ -51,7 +51,7 @@
     "name": "fn_execute_sql_query",
     "parameters": {
       "query": "INSERT INTO logs VALUES (1, 2, 3)",
-      "database": "database\"'? Wait, the description says 'parameters': {'query': {'type': 'string'},"
+      "database": "/var/lib/mysql\"."
     }
   },
   {
@@ -59,7 +59,7 @@
     "name": "fn_read_file",
     "parameters": {
       "path": "/home/user/data.json",
-      "encoding": "csv"
+      "encoding": "secret"
     }
   },
   {
@@ -67,7 +67,7 @@
     "name": "fn_read_file",
     "parameters": {
       "path": "config.ini",
-      "encoding": "config.ini', encoding: latin-1"
+      "encoding": "path"
     }
   },
   {

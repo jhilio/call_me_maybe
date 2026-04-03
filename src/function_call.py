@@ -42,7 +42,7 @@ class FunctionCall:
         "fill the parameter according to function definition and the user request\n\n"
     ),
     "string": (
-        "Function: {func}\n"
+        "Function: {func[name]}\n"
         "Description: {func[description]}\n"
         "Param_state: {param_state}\n"
         "Parameter: {param_name}\n"
@@ -114,24 +114,19 @@ class FunctionCall:
                     commentary_prompt = (
                         "Context : \n"
                         f"the value '{param_try}' is not a valid output for\n"
-                        f"parameter '{param_name}' in the function {func}for \n"
+                        f"parameter '{param_name}' in the function {func} for\n"
                         f"the user prompt '{self.prompt}'\n\n"
                         
                         "your task is to descibe :\n"
                         "A, why the value dont fit the argument needed for the user request \n"
-                        "B, quick advice on how to fix it (dont hesitate to simply say 'try another thing')\n"
-                        "rules :"
-                        "1 - dont cite this text"
-                        f"2 - be concise (30 to {40+i} word)"
-                        "3 - end the commentary with a new of line\n\n"
-                        "4 - double check your advice validity for B before telling them"
+                        "B, quick advice on how to fix it\n"
                         "Commentary: "
                     )
                     retry_context = "advice from previous attempt : \n" + free_commentary(
                         commentary_prompt,
                         self.llm,
                         max_len=80
-                    )
+                    ).strip("\n") + "\n\n"
                     print(f"\n\n\n\n\n{retry_context=}")
             self.parameter[param_name] = param_try
             print(f"validated parameter {param_name} to be {param_try}")
