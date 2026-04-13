@@ -1,5 +1,6 @@
 
 
+from tkinter import NO
 from typing import Any
 from llm_sdk import Small_LLM_Model
 from restrained_decoding import free_commentary, phrase_only_rd, param_fill_rd, restrained_decoding_number
@@ -56,15 +57,30 @@ class FunctionCall:
 }
     def __init__(self, llm: Small_LLM_Model, func_data: list[dict], prompt: str):
         self.function_name = "None" 
-        self.parameter = {}
+        self.parameter: dict[str, Any] = {}
         self.llm = llm
         self.func_data = func_data
         self.prompt = prompt
+        REGEX = {
+        "vowels": ["[aeiou]\n"],
+        "numbers": ["-?\\d+"]
+        }
+        REPLACEMENT = {
+            "asterisk": ["*\n"],
+            "numbers": ["NUMBERS"]
+        }
+        QUERY = {
+            "query": ["SELECT",
+                "*",
+                "FROM"]
+        }
+        BIASED = {"regex": REGEX, "replacement": REPLACEMENT, "SQL": QUERY}
+        self.all_bias = BIASED
     
     def find_fn_name(
             self,
-            temperature: int=0.7):
-        allowed = [item.get("name") for item in self.func_data if "name" in item]
+            temperature: float=0.7) -> None:
+        allowed: list[str] = [str(item.get("name")) for item in self.func_data if "name" in item]
         base_prompt = (
             "You are a strict function router.\n"
         "Your job is to select the correct function from the list below.\n\n"
@@ -78,12 +94,18 @@ class FunctionCall:
         post_prompt = "Function router:"
         if self.prompt.strip():
             self.function_name = phrase_only_rd(
-                base_prompt + self.prompt + post_prompt, allowed, self.llm, temperature, acceptable_margin=0.1, max_token=True)
+                base_prompt + self.prompt + post_prompt,
+                allowed,
+                self.llm,
+                temperature,
+                acceptable_margin=0.1, max_token=True)
         else:
             self.function_name = "None"
 
-    def get_param(self):
+    def get_param(self) -> None:
         MAX_TRY = 5
+        if self.function_name == "None":
+            return
         try:
             func = [func for func in self.func_data if func["name"] == self.function_name][0]
         except IndexError:
@@ -126,18 +148,18 @@ class FunctionCall:
                         commentary_prompt,
                         self.llm,
                         focus_text={
-                            param_try: 1.0,
-                            param_name: 1.0,
-                            self.prompt: 1.0
+                            # param_try: 1.0,
+                            # param_name: 1.0,
+                            # self.prompt: 1.0
                         },
                         max_token=True,
                         max_len=60
                     ).strip("\n") + "\n\n"
-                    print(f"\n\n\n\n\n{retry_context=}")
+                    print(f"\n\n{retry_context=}\n")
             self.parameter[param_name] = param_try
             print(f"validated parameter {param_name} to be {param_try}")
             
-    def judge_param(self, param_value: Any):
+    def judge_param(self, param_value: Any) -> bool:
         if param_value is None:
             return False
         if isinstance(param_value, str) and param_value.strip().lower() == self.prompt.strip().lower():
@@ -148,23 +170,12 @@ class FunctionCall:
             return False
         return True
 
-    def set_param(self, param_type, param_name, full_prompt, random: bool=False):
-        REGEX = {
-            "vowels": ["[aeiou]\n"],
-            "numbers": ["-?\\d+"]
-        }
-        REPLACEMENT = {
-            "asterisk": ["*\n"],
-            "numbers": ["NUMBERS"]
-        }
-        QUERY = {
-            "query": ["SELECT",
-                  "*",
-                  "FROM"]
-        }
-        BIASED = {"regex": REGEX, "replacement": REPLACEMENT, "SQL": QUERY}
-
-        result = None
+    def set_param(self,
+                  param_type: str,
+                  param_name: str,
+                  full_prompt: str,
+                  random: bool=False) -> str | bool | int | float | None:
+        result: str | None | float | int | bool = None
         if param_type == "number":
             numbers_in_prompt = [x for x in extract_numbers(self.prompt, allow_float=True) if float(x) not in self.parameter.values()]
             value_output = restrained_decoding_number(full_prompt, numbers_in_prompt, self.llm)
@@ -174,8 +185,8 @@ class FunctionCall:
                 result = None
         elif param_type == "integer":
             numbers_in_prompt = extract_numbers(self.prompt, allow_float=True)
-            numbers_in_prompt = [float(x) if '.' in x else int(x) for x in numbers_in_prompt]
-            left_in_prompt = [str(x) for x in numbers_in_prompt if x not in self.parameter.values()]
+            typed_number = [float(x) if '.' in x else int(x) for x in numbers_in_prompt]
+            left_in_prompt = [str(x) for x in typed_number if x not in self.parameter.values()]
             value_output = restrained_decoding_number(full_prompt, left_in_prompt, self.llm)
             try:
                 result = int(value_output)
@@ -198,11 +209,12 @@ class FunctionCall:
                     param_name: 0.1,
                     param_name.lower(): 0.1
                 }
-            for name, bias in BIASED.items():
+            for name, bias in self.all_bias.items():
                 if param_name == name:
                     for k, v in bias.items():
                         if k in self.prompt:
-                            boosted.extend(self.llm.encode(v).tolist()[0])
+                            for phrases in v:
+                                boosted.extend(self.llm.encode(phrases).tolist()[0])
             final_prompt = full_prompt + ('"' if "'" in self.prompt else "'")
             value_output = param_fill_rd(
                 final_prompt,
@@ -223,42 +235,9 @@ class FunctionCall:
 
         return result
 
-    def to_dict(self):
+    def to_dict(self) -> dict:
         return {
             "prompt": self.prompt,
             "func_name": self.function_name,
             "parameters": self.parameter
         }
-    
-
-
-#             checks = {
-#         "user_request": f"""
-# Candidate value '{param_value}' for parameter '{param_name}'.
-# User request: "{self.prompt}"
-
-# Choose the correct option:
-
-# A) The candidate correctly satisfies the user request
-# B) The candidate does not satisfy the user request
-
-# Answer ONLY "A" or "B".
-# Response : 
-# """
-#         }
-#         base_prompt = f"Function :\n{func_def}.\n"
-#         results = {}
-#         for check_name, prompt in checks.items():
-#             output = phrase_only_rd(base_prompt + prompt, allowed_string, self.llm,
-#                                     acceptable_margin=0, max_token=True)
-#             if output == "A":
-#                 output = "pass"
-#             if output == "B":
-#                 output = "blocked"
-#             results[check_name] = output
-#             # if output == "blocked" :
-#             print(f"{check_name} check for {param_name} [{param_value}]: {output}")
-
-#         # Final decision: must pass all checks
-#         if all(v == "pass" for v in results.values()):
-#             return True

@@ -43,7 +43,7 @@
     "name": "fn_execute_sql_query",
     "parameters": {
       "query": "SELECT * FROM users",
-      "database": "production database"
+      "database": "Database '"
     }
   },
   {
@@ -67,7 +67,7 @@
     "name": "fn_read_file",
     "parameters": {
       "path": "config.ini",
-      "encoding": "config.ini"
+      "encoding": "combine"
     }
   },
   {

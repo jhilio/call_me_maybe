@@ -4,7 +4,7 @@ from math import exp, sqrt
 import random
 import re
 
-def find_closing_quote_in_text(decoded_text):
+def find_closing_quote_in_text(decoded_text: str) -> tuple[bool, int]:
     """
     Returns True if a quote is followed by a space or newline.
     """
@@ -15,7 +15,9 @@ def find_closing_quote_in_text(decoded_text):
     return (False, 0)
 
 
-def get_compatible_next_tokens(current_output, allowed_token_phrases):
+def get_compatible_next_tokens(
+        current_output: list[int],
+        allowed_token_phrases: list[list[int]]) -> list[int]:
     # returns set of token IDs allowed as the next token
     compatible_next_tokens = set()
     len_output = len(current_output)
@@ -31,13 +33,13 @@ def phrase_only_rd(
         prompt: str,
         allowed: list[str],
         llm: Small_LLM_Model,
-        temperature: int=0.7,
-        acceptable_margin=0.5,
-        max_token=False,
-        verbose=False) -> str:
+        temperature: float=0.7,
+        acceptable_margin:float=0.5,
+        max_token: bool=False,
+        verbose: bool=False) -> str:
     allowed_token_ids = [llm.encode(string).tolist()[0] for string in allowed]
     input_token = llm.encode(prompt).tolist()[0]
-    current_output = []
+    current_output: list[int] = []
     # if verbose:
         # print(prompt)
     while (allowed_next := get_compatible_next_tokens(
@@ -74,9 +76,9 @@ def phrase_only_rd(
 
 def param_fill_rd(
         prompt: str,
-        llm,
+        llm: Small_LLM_Model,
         max_len: int = 10,
-        focus_text: dict[str, int]={},
+        focus_text: dict[str, float]={},
         boost_tokens: list[list[int]] | None = None,
         max_token: bool=True,
         verbose: bool=False) -> str:
@@ -92,9 +94,9 @@ def param_fill_rd(
     if not max_token:
         print("fill param with a bit of random")
     input_ids = llm.encode(prompt).tolist()[0]
-    current_output = []
+    current_output: list[int] = []
     current_text = ""
-    focus_ids= {}
+    focus_ids: dict[int, float] = {}
     # compute bias tokens only from focus_text
     for text, value in focus_text.items():
         for tok in set(llm.encode(text).tolist()[0]):
@@ -152,7 +154,7 @@ def restrained_decoding_number(
     # encode the allowed tokens
     allowed_token_seqs = [llm.encode(t).tolist()[0] for t in allowed_numbers]
     input_token = llm.encode(prompt).tolist()[0]
-    current_output = []
+    current_output: list[int] = []
 
     while (allowed_next := get_compatible_next_tokens(current_output, allowed_token_seqs)):
         input_ids = input_token + current_output
@@ -176,10 +178,10 @@ def restrained_decoding_number(
 
 
 def free_commentary(
-   prompt: str,
-        llm,
+        prompt: str,
+        llm: Small_LLM_Model,
         max_len: int = 10,
-        focus_text: dict[str, int]={},
+        focus_text: dict[str, float]={},
         max_token: bool=False,
         verbose: bool=False) -> str:
     """
@@ -192,9 +194,9 @@ def free_commentary(
         focus_text: Optional string to bias token selection toward
     """
     input_ids = llm.encode(prompt).tolist()[0]
-    current_output = []
+    current_output: list[int]= []
     current_text = ""
-    focus_ids= {}
+    focus_ids: dict[int,float] = {}
     # compute bias tokens only from focus_text
     for text, value in focus_text.items():
         for tok in set(llm.encode(text).tolist()[0]):
@@ -205,7 +207,7 @@ def free_commentary(
         for token_id, boost_value in focus_ids.items():
             logits[token_id] *= boost_value
         for i, token in enumerate(current_output): # dont repeat rule
-            logits[token] *= (0.8 * (i / len(current_output)))
+            logits[token] *= (0.85 * (i / len(current_output)))
         # deterministic argmax
         if max_token:
             next_token = logits.index(max(logits))
@@ -214,7 +216,7 @@ def free_commentary(
             weights = [exp(w - max_logit) for w in logits]
             next_token = random.choices(population=list(range(len(logits))), weights=weights)[0]
         current_output.append(next_token)
-        current_text: str = llm.decode(current_output)
+        current_text = llm.decode(current_output)
         if "\n\n" in current_text or (current_text.__len__() > 100 and "\n" in current_text):
             if verbose:
                 print(f"break with {current_text}")

@@ -1,10 +1,10 @@
 from llm_sdk import Small_LLM_Model
 from json_io import generate_json_output, get_prompt, get_func_def
 from function_call import FunctionCall
-from argparse import ArgumentParser
+from argparse import ArgumentParser, Namespace
 
 
-def get_input_path():
+def get_input_path()-> Namespace:
     parser = ArgumentParser(exit_on_error=False)
     parser.add_argument("--input_function",
                         help="the path to func definitions",
@@ -21,7 +21,7 @@ def get_input_path():
     return parser.parse_args()
 
 
-def main():
+def main()-> None:
     try:
         path = get_input_path()
         function_defs= get_func_def(path.input_function)
@@ -37,7 +37,7 @@ def main():
         act_call.find_fn_name()
         act_call.get_param()
         future_json.append(act_call.to_dict())
-    print("result :\n" +''.join(f"{'\n'.join(f'[{k} : {v}]' for k, v in dic.items())}\n\n" for dic in future_json))
+    print("result :\n" +"\n\n".join("".join('\n'.join([f'[{k} : {v}]' for k, v in dic.items()])) for dic in future_json))
     generate_json_output(future_json, path.output_file)
 
 if __name__ == "__main__":
