@@ -1,6 +1,8 @@
 
+from llm_interaction import MyLLM
 from llm_sdk import Small_LLM_Model
 from math import exp, sqrt
+from utils import monitor_time
 import random
 import re
 
@@ -15,6 +17,7 @@ def find_closing_quote_in_text(decoded_text: str) -> tuple[bool, int]:
     return (False, 0)
 
 
+@monitor_time
 def get_compatible_next_tokens(
         current_output: list[int],
         allowed_token_phrases: list[list[int]]) -> list[int]:
@@ -29,54 +32,49 @@ def get_compatible_next_tokens(
     return list(compatible_next_tokens)
 
 
+@monitor_time
 def phrase_only_rd(
         prompt: str,
         allowed: list[str],
-        llm: Small_LLM_Model,
-        temperature: float=0.7,
-        acceptable_margin:float=0.5,
-        max_token: bool=False,
-        verbose: bool=False) -> str:
-    allowed_token_ids = [llm.encode(string).tolist()[0] for string in allowed]
+        llm: MyLLM,
+        temperature: float = 0.7,
+        acceptable_margin: float = 0.5,
+        max_token: bool = False,
+        verbose: bool = False,
+    ) -> str:
+    allowed_token_ids = [llm.encode(s).tolist()[0] for s in allowed]
     input_token = llm.encode(prompt).tolist()[0]
     current_output: list[int] = []
-    # if verbose:
-        # print(prompt)
-    while (allowed_next := get_compatible_next_tokens(
-        current_output, allowed_token_ids)):
-        if not allowed_next:
-            break
+    while (allowed_next := get_compatible_next_tokens(current_output, allowed_token_ids)):
         input_ids = input_token + current_output
-        logits = llm.get_logits_from_input_ids(input_ids)
-        raw_weights = [logits[token_id] for token_id in allowed_next]
-        # numerically stable softmax
-        max_logit = max(raw_weights)
-        weights = [exp((w - max_logit) / temperature) for w in raw_weights]
-        # normalize
-        total = sum(weights)
-        probs = [w / total for w in weights]
-
-        sorted_probs = sorted(probs, reverse=True)
-
-        if len(sorted_probs) > 1:
-            margin = sorted_probs[0] - sorted_probs[1]
-        else:
-            margin = 1.0  # only one option
-        if verbose:
-            print(f"{margin=}")
-        if margin < acceptable_margin:   # tune this (0.1–0.3 usually good)
-            return "None"
+        logits = llm.llm.get_logits_from_input_ids(input_ids)
+        raw_weights = [logits[t] for t in allowed_next]
+        # ---- MAX TOKEN PATH (NO PROBS NEEDED) ----
         if max_token:
-            next_token = allowed_next[weights.index(max(weights))]
+            next_token = allowed_next[raw_weights.index(max(raw_weights))]
+        # ---- SAMPLING PATH (ONLY HERE WE COMPUTE PROBS) ----
         else:
-            next_token = random.choices(population=list(allowed_next), weights=weights)[0]
+            max_logit = max(raw_weights)
+            weights = [exp((w - max_logit) / temperature) for w in raw_weights]
+            total = sum(weights)
+            probs = [w / total for w in weights]
+            sorted_probs = sorted(probs, reverse=True)
+            margin = sorted_probs[0] - sorted_probs[1] if len(sorted_probs) > 1 else 1.0
+            if verbose:
+                print(f"{margin=}")
+            if margin < acceptable_margin:
+                return "None"
+            next_token = random.choices(list(allowed_next), weights=weights)[0]
+
         current_output.append(next_token)
+
     return llm.decode(current_output)
 
 
+@monitor_time
 def param_fill_rd(
         prompt: str,
-        llm: Small_LLM_Model,
+        llm: MyLLM,
         max_len: int = 10,
         focus_text: dict[str, float]={},
         boost_tokens: list[list[int]] | None = None,
@@ -102,7 +100,7 @@ def param_fill_rd(
         for tok in set(llm.encode(text).tolist()[0]):
             focus_ids[tok] = focus_ids.get(tok, 0) + value 
     for _ in range(max_len):
-        logits = llm.get_logits_from_input_ids(input_ids + current_output)
+        logits = llm.llm.get_logits_from_input_ids(input_ids + current_output)
         # bias logits toward focus_text tokens
         for token_id, boost_value in focus_ids.items():
             logits[token_id] *= boost_value
@@ -111,12 +109,11 @@ def param_fill_rd(
             boost_strength = 15
             for phrase in boost_tokens:
                 if not current_output:
-                    logits[phrase[0]] += boost_strength* sqrt(len(llm.decode(phrase)))
+                    logits[phrase[0]] += boost_strength
                     if verbose:
                         print(f"={current_text}=, boost {llm.decode(phrase[0])}")
                 else:
                     last_token = current_output[-1]
-
                     if last_token in phrase:
                         idx = phrase.index(last_token)
                         if idx < len(phrase) - 1:
@@ -130,7 +127,6 @@ def param_fill_rd(
             max_logit = max(logits)
             weights = [exp(w - max_logit) for w in logits]
             next_token = random.choices(population=list(range(len(logits))), weights=weights)[0]
-           
         current_output.append(next_token)
         current_text = llm.decode(current_output)
         if (quote :=find_closing_quote_in_text(current_text))[0] or "\n" in current_text:
@@ -141,45 +137,33 @@ def param_fill_rd(
             break
     return current_text
 
+@monitor_time
 def restrained_decoding_number(
     prompt: str,
     allowed_numbers: list[str],
-    llm: Small_LLM_Model,
-    temperature: float = 0.01,
+    llm,
 ) -> str:
-    """
-    Generate multiple tokens from the LLM using a restricted set of allowed tokens.
-    Stops only when no compatible next token is available or max_len is reached.
-    """
-    # encode the allowed tokens
+
     allowed_token_seqs = [llm.encode(t).tolist()[0] for t in allowed_numbers]
     input_token = llm.encode(prompt).tolist()[0]
     current_output: list[int] = []
 
     while (allowed_next := get_compatible_next_tokens(current_output, allowed_token_seqs)):
         input_ids = input_token + current_output
-        logits = llm.get_logits_from_input_ids(input_ids)
-        raw_weights = [logits[token_id] for token_id in allowed_next]
-
-        # softmax
-        max_logit = max(raw_weights)
-        weights = [exp((w - max_logit)/temperature) for w in raw_weights]
-        total = sum(weights)
-        probs = [w/total for w in weights]
-
-        # pick the most likely token
-        next_token = allowed_next[probs.index(max(probs))]
+        logits = llm.llm.get_logits_from_input_ids(input_ids)
+        raw_weights = [logits[t] for t in allowed_next]
+        # GREEDY: no softmax, no probs
+        next_token = allowed_next[raw_weights.index(max(raw_weights))]
         current_output.append(next_token)
-
-        # stop if we generated a complete number
-        if any(current_output == seq for seq in allowed_token_seqs):
+        if current_output in allowed_token_seqs:
             break
     return llm.decode(current_output)
 
 
+@monitor_time
 def free_commentary(
         prompt: str,
-        llm: Small_LLM_Model,
+        llm: MyLLM,
         max_len: int = 10,
         focus_text: dict[str, float]={},
         max_token: bool=False,
@@ -202,7 +186,7 @@ def free_commentary(
         for tok in set(llm.encode(text).tolist()[0]):
             focus_ids[tok] = focus_ids.get(tok, 0) + value 
     for _ in range(max_len):
-        logits = llm.get_logits_from_input_ids(input_ids + current_output)
+        logits = llm.llm.get_logits_from_input_ids(input_ids + current_output)
         # bias logits toward focus_text tokens
         for token_id, boost_value in focus_ids.items():
             logits[token_id] *= boost_value
@@ -223,3 +207,5 @@ def free_commentary(
             current_text = current_text[0:current_text.rfind("\n")]
             break
     return current_text
+
+

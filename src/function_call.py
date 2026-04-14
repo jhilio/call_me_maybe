@@ -1,9 +1,9 @@
 
 
-from tkinter import NO
 from typing import Any
-from llm_sdk import Small_LLM_Model
+from llm_interaction import MyLLM
 from restrained_decoding import free_commentary, phrase_only_rd, param_fill_rd, restrained_decoding_number
+from utils import monitor_time
 import re
 
 def extract_numbers(prompt: str, allow_float: bool=False) -> list[str]:
@@ -55,7 +55,7 @@ class FunctionCall:
         "   Finish your response by a new line.\n\n"
     ),
 }
-    def __init__(self, llm: Small_LLM_Model, func_data: list[dict], prompt: str):
+    def __init__(self, llm: MyLLM, func_data: list[dict], prompt: str):
         self.function_name = "None" 
         self.parameter: dict[str, Any] = {}
         self.llm = llm
@@ -77,6 +77,7 @@ class FunctionCall:
         BIASED = {"regex": REGEX, "replacement": REPLACEMENT, "SQL": QUERY}
         self.all_bias = BIASED
     
+    @monitor_time
     def find_fn_name(
             self,
             temperature: float=0.7) -> None:
@@ -102,6 +103,7 @@ class FunctionCall:
         else:
             self.function_name = "None"
 
+    @monitor_time
     def get_param(self) -> None:
         MAX_TRY = 5
         if self.function_name == "None":
@@ -162,8 +164,8 @@ class FunctionCall:
     def judge_param(self, param_value: Any) -> bool:
         if param_value is None:
             return False
-        if isinstance(param_value, str) and param_value.strip().lower() == self.prompt.strip().lower():
-            return False
+        # if isinstance(param_value, str) and param_value.strip().lower() == self.prompt.strip().lower():
+        #     return False
         if param_value in self.parameter.values():
             return False
         if param_value in self.parameter.keys():
@@ -214,7 +216,9 @@ class FunctionCall:
                     for k, v in bias.items():
                         if k in self.prompt:
                             for phrases in v:
-                                boosted.extend(self.llm.encode(phrases).tolist()[0])
+                                boosted.append(self.llm.encode(phrases).tolist()[0])
+            # if boosted:
+            #     print(boosted)
             final_prompt = full_prompt + ('"' if "'" in self.prompt else "'")
             value_output = param_fill_rd(
                 final_prompt,
