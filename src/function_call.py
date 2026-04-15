@@ -19,42 +19,95 @@ def extract_words(text: str) -> list[str]:
 class FunctionCall:
 
     param_type_prompts = {
-    "number": (
-    "Task: Extract a numeric value from the user request.\n\n"
+    "number": ("""
+<|im_start|>system
+Task: fill the parameter with the correct numeric value from the user request
 
-    "Function: {func}\n"
-    "User request: {prompt}\n"
-    "Current parameter state: {param_state}\n"
-    "Parameter to fill: {param_name}\n"
-    "Expected type: number\n\n"
+<tools>
+{func}
+</tools>
+Current parameter state: {param_state}
+Parameter to fill: {param_name}
+Expected type: number
 
-    "Rules:\n"
-    "- Extract exactly ONE number from the user request.\n"
-    "- If multiple numbers are present, choose the FIRST number from left to right.\n"
-    "- If this number is already used in parameter_state, choose the next unused number.\n"
-    "- NEVER evaluate a result, simply extract values already in user request\n"
+<|im_start|>user
+{prompt}<|im_end|>
+<|im_start|>assistant
+Okay the fiting number is : """
     ),
-    "boolean": (
-        "You are extracting a boolean parameter for this function: {func}\n"
-        "User request: {prompt}\n"
-        "Actual parameter_state: {param_state}\n"
-        "Parameter name you're filling: {param_name}\n"
-        "Expected type: boolean\n"
-        "fill the parameter according to function definition and the user request\n\n"
+    "integer":("""
+<|im_start|>system
+Task: Extract an integer value from the user request.
+
+<tools>
+{func}
+</tools>
+Current parameter state: {param_state}
+Parameter to fill: {param_name}
+Expected type: integer
+
+<|im_start|>user
+{prompt}<|im_end|>
+<|im_start|>assistant
+"""),
+    "boolean": ("""
+<|im_start|>system
+You are extracting a boolean parameter for a function.
+
+<tools>
+{func}
+</tools>
+Actual parameter_state: {param_state}
+Parameter name you're filling: {param_name}
+Expected type: boolean
+
+Fill the parameter according to function definition and the user request.<|im_end|>
+<|im_start|>user
+{prompt}<|im_end|>
+<|im_start|>assistant
+"""
     ),
-    "string": (
-        "Function: {func[name]}\n"
-        "Description: {func[description]}\n"
-        "Param_state: {param_state}\n"
-        "Parameter: {param_name}\n"
-        "Type: string\n"
-        "Request: |\33[31m{prompt}\33[0m|\n\n"
-        "Rules :\n"
-        "   Do NOT apply the function.\n"
-        "   Do NOT repeat previous parameter values.\n"
-        "   Finish your response by a new line.\n\n"
+    "string": ("""
+<|im_start|>system
+You extract string parameters for function calls.
+
+<tools>
+{func}
+</tools>
+Param_state: {param_state}
+Parameter: {param_name}
+Type: string
+
+Rules:
+- Do NOT apply the function.
+- Do NOT repeat previous parameter values.
+- Verify that you value match both user request and function description<|im_end|>
+<|im_start|>user
+{prompt}<|im_end|>
+<|im_start|>assistant
+"""
     ),
 }
+    COMMENTARY_PROMPT = ("""
+<|im_start|>system
+Context:
+'{param_try}' is invalid for '{param_name}' in this function :
+<tools>
+{func}
+</tools>
+from prompt '{prompt}'.
+here is the curent parameter state;
+<tools>
+{param_state}
+</tools>
+Do not change prompt casing.
+Param value should never be repeated
+Explain consisely (30 to 50 character):
+A. Why it's invalid
+B. How to fix it<|im_end|>
+<|im_start|>assistant
+"""
+                    )
     def __init__(self, llm: MyLLM, func_data: list[dict], prompt: str):
         self.function_name = "None" 
         self.parameter: dict[str, Any] = {}
@@ -62,8 +115,8 @@ class FunctionCall:
         self.func_data = func_data
         self.prompt = prompt
         REGEX = {
-        "vowels": ["[aeiou]\n"],
-        "numbers": ["-?\\d+"]
+            "vowels": ["[aeiou]\n"],
+            "numbers": ["-?\\d+"]
         }
         REPLACEMENT = {
             "asterisk": ["*\n"],
@@ -99,13 +152,13 @@ class FunctionCall:
                 allowed,
                 self.llm,
                 temperature,
-                acceptable_margin=0.1, max_token=True)
+                acceptable_margin=0.2, max_token=True)
         else:
             self.function_name = "None"
 
     @monitor_time
     def get_param(self) -> None:
-        MAX_TRY = 5
+        MAX_TRY = 3
         if self.function_name == "None":
             return
         try:
@@ -114,8 +167,6 @@ class FunctionCall:
             self.parameter = {}
             return
         param_schema = func.get("parameters", {})
-        self.parameter = {}
-
         for param_name, param_info in param_schema.items():
             param_type = param_info.get("type", "string")
 
@@ -130,36 +181,21 @@ class FunctionCall:
             i = 0
             for i in range(MAX_TRY):
                 full_prompt = base_prompt + retry_context + "parameter value:"
-                # print(full_prompt)
                 param_try = self.set_param(param_type, param_name, full_prompt, random=bool(retry_context))
                 if self.judge_param(param_try):
                     break
                 if i < MAX_TRY - 1:
-                    commentary_prompt = (
-                        f"Context:\n"
-                        f"'{param_try}' is invalid for '{param_name}' in {func}, "
-                        f"from prompt '{self.prompt}'.\n\n"
-                        "Do not change prompt casing.\n"
-                        "End with two empty lines.\n\n"
-                        "Explain:\n"
-                        "A. Why it's invalid\n"
-                        "B. How to fix it\n\n"
-                        "Explanation:"
-                    )
+                    print(f"temporary result : {param_try}")
                     retry_context = "advice from previous attempt : \n" + free_commentary(
-                        commentary_prompt,
+                        self.COMMENTARY_PROMPT.format(
+                            param_try=param_try, param_name=param_name, func=func,prompt=self.prompt, param_state=self.parameter),
                         self.llm,
-                        focus_text={
-                            # param_try: 1.0,
-                            # param_name: 1.0,
-                            # self.prompt: 1.0
-                        },
-                        max_token=True,
-                        max_len=60
+                        max_token=False,
+                        max_len=40
                     ).strip("\n") + "\n\n"
-                    print(f"\n\n{retry_context=}\n")
+                    print(f"\n\n{retry_context=}")
             self.parameter[param_name] = param_try
-            print(f"validated parameter {param_name} to be {param_try}")
+            print(f"validated parameter |{param_name}| to be |{param_try}|")
             
     def judge_param(self, param_value: Any) -> bool:
         if param_value is None:
@@ -188,7 +224,7 @@ class FunctionCall:
         elif param_type == "integer":
             numbers_in_prompt = extract_numbers(self.prompt, allow_float=True)
             typed_number = [float(x) if '.' in x else int(x) for x in numbers_in_prompt]
-            left_in_prompt = [str(x) for x in typed_number if x not in self.parameter.values()]
+            left_in_prompt = [str(x) for x in typed_number if x not in self.parameter.values() and isinstance(x, int)]
             value_output = restrained_decoding_number(full_prompt, left_in_prompt, self.llm)
             try:
                 result = int(value_output)
@@ -217,8 +253,6 @@ class FunctionCall:
                         if k in self.prompt:
                             for phrases in v:
                                 boosted.append(self.llm.encode(phrases).tolist()[0])
-            # if boosted:
-            #     print(boosted)
             final_prompt = full_prompt + ('"' if "'" in self.prompt else "'")
             value_output = param_fill_rd(
                 final_prompt,
@@ -229,7 +263,7 @@ class FunctionCall:
                 max_token=not random
                 )
             result = value_output.strip(" \n")
-            while True:
+            while result:
                 if (result[0] == '"' or final_prompt[-1] == '"') and result[-1] == '"':
                     result = result.strip('"')
                 elif (result[0] == "'" or final_prompt[-1] == "'") and result[-1] == "'":

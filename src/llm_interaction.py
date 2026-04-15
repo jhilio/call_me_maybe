@@ -109,12 +109,25 @@ class MyLLM:
     def clean_ansi(self, text: str):
         return self.ansi_regex.sub('', text)
 
+    # def encode(self, text: str) -> Tensor:
+
+
+
     @monitor_time
     def encode(self, text: str) -> Tensor:
         text = self.clean_ansi(text)
-        return torch.tensor([self.tokenize(text)], dtype=torch.long)
+        text1 = torch.tensor([self.tokenize(text)], dtype=torch.long)
+        text2 = self.llm.encode(text)
+        # if str(text1.tolist()) != str(text2.tolist()):
+        #     print(f"error 1: \n\033[33m{text}\033[0m\n\033[32m{text1}\033[0m, \033[034{text2}\033[0m")
+        return text2
 
     def decode(self, ids: Tensor | list[int]) -> str:
         if isinstance(ids, Tensor):
             ids = Tensor.tolist()[0]
-        return "".join([self.vocab[token] for token in ids]).translate(self.untranslate_table)
+        
+        text1 = "".join([self.vocab[token] for token in ids]).translate(self.untranslate_table)
+        text2 = self.llm.decode(ids)
+        # if text1 != text2:
+        #     print(f"error 2: \n{ids}\n{text1}, {text2}")
+        return text2

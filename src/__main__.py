@@ -56,8 +56,8 @@ def main()-> None:
 
 if __name__ == "__main__":
     main()
-    stats = monitor_time(show=True)
-    for func, s in sorted(stats.items(), key=lambda m: m[1]["total_time"]):
-        if s["call_count"]:
-            avg = s["total_time"] / s["call_count"]
-            print(f"{func.__name__}, took a total of :\n{s['total_time']:.3f}sec, for {s['call_count']} call, with an average of {avg:.3f}sec\n")
+    # stats = monitor_time(show=True)
+    # for func, s in sorted(stats.items(), key=lambda m: m[1]["total_time"]):
+    #     if s["call_count"]:
+    #         avg = s["total_time"] / s["call_count"]
+    #         print(f"{func.__name__}, took a total of :\n{s['total_time']:.3f}sec, for {s['call_count']} call, with an average of {avg:.3f}sec\n")
