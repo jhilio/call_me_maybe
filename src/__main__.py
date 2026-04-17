@@ -1,9 +1,11 @@
+import llm_interaction
 from llm_sdk import Small_LLM_Model
 from llm_interaction import MyLLM
 from json_io import generate_json_output, get_prompt, get_func_def
 from function_call import FunctionCall
 from argparse import ArgumentParser, Namespace
 from utils import monitor_time
+import sys
 
 def get_input_path() -> Namespace:
     parser = ArgumentParser(exit_on_error=False)
@@ -24,14 +26,14 @@ def get_input_path() -> Namespace:
 
 @monitor_time
 def main()-> None:
-    # try:
-    path = get_input_path()
-    function_defs = get_func_def(path.input_function)
-    prompts_list = get_prompt(path.input_prompt)
-    llm = MyLLM(Small_LLM_Model())
-    # except Exception as error:
-    #     print(error, "occured while initializing program")
-    #     return
+    try:
+        path = get_input_path()
+        function_defs = get_func_def(path.input_function)
+        prompts_list = get_prompt(path.input_prompt)
+        llm = MyLLM(Small_LLM_Model())
+    except Exception as error:
+        print(error, "occured while initializing program")
+        return
     try:
         future_json = []
         for prompt in prompts_list:

@@ -131,7 +131,8 @@ def param_fill_rd(
             next_token = random.choices(population=list(range(len(logits))), weights=weights)[0]
         current_output.append(next_token)
         current_text = llm.decode(current_output)
-        if (quote :=find_closing_quote_in_text(current_text))[0] or "\n" in current_text:
+        if (quote :=find_closing_quote_in_text(current_text))[0] or "\n" in current_text or "<|im_end|>" in current_text:
+            current_text.removesuffix("<|im_end|>")
             if verbose:
                 print(f"break with {current_text}, {quote=}")
             if quote[0]:
@@ -157,7 +158,6 @@ def restrained_decoding_number(
         # GREEDY: no softmax, no probs
         next_token = allowed_next[raw_weights.index(max(raw_weights))]
         current_output.append(next_token)
-        print(llm.decode(next_token), end="")
         if current_output in allowed_token_seqs:
             break
     return llm.decode(current_output)
@@ -179,7 +179,7 @@ def free_commentary(
         max_len: Maximum tokens to decode
         focus_text: Optional string to bias token selection toward
     """
-    print(prompt)
+    # print(prompt)
     input_ids = llm.encode(prompt).tolist()[0]
     current_output: list[int]= []
     current_text = ""
@@ -206,6 +206,7 @@ def free_commentary(
         current_output.append(next_token)
         current_text = llm.decode(current_output)
         if "<|im_end|>" in current_text:
+            current_text.removesuffix("<|im_end|>")
             break
     return current_text
 

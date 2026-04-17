@@ -32,8 +32,7 @@ Expected type: number
 
 <|im_start|>user
 {prompt}<|im_end|>
-<|im_start|>assistant
-Okay the fiting number is : """
+"""
     ),
     "integer":("""
 <|im_start|>system
@@ -48,7 +47,6 @@ Expected type: integer
 
 <|im_start|>user
 {prompt}<|im_end|>
-<|im_start|>assistant
 """),
     "boolean": ("""
 <|im_start|>system
@@ -64,7 +62,6 @@ Expected type: boolean
 Fill the parameter according to function definition and the user request.<|im_end|>
 <|im_start|>user
 {prompt}<|im_end|>
-<|im_start|>assistant
 """
     ),
     "string": ("""
@@ -84,7 +81,6 @@ Rules:
 - Verify that you value match both user request and function description<|im_end|>
 <|im_start|>user
 {prompt}<|im_end|>
-<|im_start|>assistant
 """
     ),
 }
@@ -106,6 +102,7 @@ Explain consisely (30 to 50 character):
 A. Why it's invalid
 B. How to fix it<|im_end|>
 <|im_start|>assistant
+<think> okay after a bit of thinking the problem is "</think>"
 """
                     )
     def __init__(self, llm: MyLLM, func_data: list[dict], prompt: str):
@@ -180,16 +177,21 @@ B. How to fix it<|im_end|>
             retry_context = ""
             i = 0
             for i in range(MAX_TRY):
-                full_prompt = base_prompt + retry_context + "parameter value:"
+                full_prompt = base_prompt + retry_context + "<|im_start|>assistant\n"
+
                 param_try = self.set_param(param_type, param_name, full_prompt, random=bool(retry_context))
-                if self.judge_param(param_try):
+                if self.judge_param(param_try, param_name, func):
                     break
                 if i < MAX_TRY - 1:
                     print(f"temporary result : {param_try}")
+                    act_rompt = self.COMMENTARY_PROMPT.format(
+                            param_try=param_try, param_name=param_name, func=func,prompt=self.prompt, param_state=self.parameter)
                     retry_context = "advice from previous attempt : \n" + free_commentary(
-                        self.COMMENTARY_PROMPT.format(
-                            param_try=param_try, param_name=param_name, func=func,prompt=self.prompt, param_state=self.parameter),
+                        act_rompt,
                         self.llm,
+                        focus_text={
+                            act_rompt: 0.2
+                        },
                         max_token=False,
                         max_len=40
                     ).strip("\n") + "\n\n"
@@ -197,11 +199,33 @@ B. How to fix it<|im_end|>
             self.parameter[param_name] = param_try
             print(f"validated parameter |{param_name}| to be |{param_try}|")
             
-    def judge_param(self, param_value: Any) -> bool:
+    def judge_param(self, param_value: Any, param_name: str, func) -> bool:
         if param_value is None:
             return False
-        # if isinstance(param_value, str) and param_value.strip().lower() == self.prompt.strip().lower():
-        #     return False
+        judge_prompt = f"""
+<|im_start|>system
+Task: judge if a candidate value fit a given parameter to a function call
+<tools>
+{func}
+</tools>
+here is the curent parameter state;
+<tools>
+{self.parameter}
+</tools>
+and the current candidate for {param_name} : 
+{param_value}.
+respond with :
+"A" if the candidate EXACTLY fit the user demande
+"B" if this candidate is a repeat of previous parameter or doenst fit the user request<|im_end|>
+<|im_start|>user
+{self.prompt}<|im_end|>
+<|im_start|>assistant
+"""
+
+        if phrase_only_rd(judge_prompt
+            , ["A", "B"], self.llm, max_token=True) == "B":
+            print(f"{judge_prompt}\n\n\n\n\nrejected by ai : {param_value}")
+            return False
         if param_value in self.parameter.values():
             return False
         if param_value in self.parameter.keys():
@@ -245,6 +269,7 @@ B. How to fix it<|im_end|>
                     self.function_name: 0.4,
                     self.function_name.lower(): 0.4,
                     param_name: 0.1,
+                    "|".join(self.parameter.values()): 0.1, 
                     param_name.lower(): 0.1
                 }
             for name, bias in self.all_bias.items():
