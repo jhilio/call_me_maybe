@@ -1,13 +1,16 @@
-import llm_interaction
 from llm_sdk import Small_LLM_Model
 from llm_interaction import MyLLM
 from json_io import generate_json_output, get_prompt, get_func_def
 from function_call import FunctionCall
 from argparse import ArgumentParser, Namespace
 from utils import monitor_time
-import sys
 
 def get_input_path() -> Namespace:
+    """uses argparse to read program argument
+
+    Returns:
+        Namespace: filled with all path to the files specified at program launch
+    """    
     parser = ArgumentParser(exit_on_error=False)
     parser.add_argument("--input_function",
                         help="the path to func definitions",
@@ -21,11 +24,20 @@ def get_input_path() -> Namespace:
                         help="where to write the output",
                         default="data/output/output.txt",
                         required=False)
+    parser.add_argument("--show_time",
+                        help="weither to show time at end of programe execution",
+                        default="false",
+                        required=False)
     return parser.parse_args()
 
 
 @monitor_time
-def main()-> None:
+def main() -> None:
+    """starting point of programe
+
+    Returns:
+        None
+    """    
     try:
         path = get_input_path()
         function_defs = get_func_def(path.input_function)
@@ -46,20 +58,14 @@ def main()-> None:
         generate_json_output(future_json, path.output_file)
     except IOError as error:
         print(error, "occured while running program")
-
-# def main()-> None:
-#     llm = Small_LLM_Model()
-#     my_version = MyLLM(llm)
-#     for arg in sys.argv:
-#         test1 = llm.encode(arg)
-#         test2 = my_version.encode(arg)
-#         print(test1, "\n" + str(test2), "\n" + "\n" + my_version.decode(test2.tolist()[0]))
+    return path.show_time.casefold() == "true"
 
 
 if __name__ == "__main__":
-    main()
-    # stats = monitor_time(show=True)
-    # for func, s in sorted(stats.items(), key=lambda m: m[1]["total_time"]):
-    #     if s["call_count"]:
-    #         avg = s["total_time"] / s["call_count"]
-    #         print(f"{func.__name__}, took a total of :\n{s['total_time']:.3f}sec, for {s['call_count']} call, with an average of {avg:.3f}sec\n")
+    show_stat = main()
+    if show_stat:
+        stats = monitor_time(show=True)
+        for func, s in sorted(stats.items(), key=lambda m: m[1]["total_time"]):
+            if s["call_count"]:
+                avg = s["total_time"] / s["call_count"]
+                print(f"{func.__name__}, took a total of :\n{s['total_time']:.3f}sec, for {s['call_count']} call, with an average of {avg:.3f}sec\n")

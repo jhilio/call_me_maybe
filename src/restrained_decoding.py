@@ -89,8 +89,6 @@ def param_fill_rd(
         max_len: Maximum tokens to decode
         focus_text: Optional string to bias token selection toward
     """
-    if not max_token:
-        print("fill param with a bit of random")
     input_ids = llm.encode(prompt).tolist()[0]
     current_output: list[int] = []
     current_text = ""
@@ -225,6 +223,7 @@ def free_commentary(
         if "<|im_end|>" in current_text or "<|endoftext|>" in current_text:
             current_text.removesuffix("<|im_end|>")
             current_text = current_text.replace("<|endoftext|>", "")
+            current_text.strip()
             break
     # print(current_output, current_text)
     return current_text

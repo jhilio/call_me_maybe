@@ -17,7 +17,6 @@ def extract_words(text: str) -> list[str]:
     return re.findall(r"\b\w+\b", text)
 
 class FunctionCall:
-
     param_type_prompts = {
     "number": ("""
 <|im_start|>system
@@ -95,34 +94,37 @@ Explain consisely (30 to 50 character):
 A. Why it's invalid
 B. How to fix it<|im_end|>
 <|im_start|>assistant
-"""
-                    )
+""")
+    REGEX = {
+        "vowels": ["[aeiou]\n\n"],
+        "numbers": ["-?\\d+\n\n"]
+    }
+    REPLACEMENT = {
+        "asterisk": ["*\n"],
+        "numbers": ["NUMBERS"]
+    }
+    QUERY = {
+        "query": ["SELECT",
+            "*",
+            "FROM"]
+    }
+    BIASED = {"regex": REGEX, "replacement": REPLACEMENT, "SQL": QUERY}
+
     def __init__(self, llm: MyLLM, func_data: list[dict], prompt: str):
+        """simply initialise the class with given and default value where needed"""
         self.function_name = "None" 
         self.parameter: dict[str, Any] = {}
         self.llm = llm
         self.func_data = func_data
         self.prompt = prompt
-        REGEX = {
-            "vowels": ["[aeiou]\n\n"],
-            "numbers": ["-?\\d+\n\n"]
-        }
-        REPLACEMENT = {
-            "asterisk": ["*\n"],
-            "numbers": ["NUMBERS"]
-        }
-        QUERY = {
-            "query": ["SELECT",
-                "*",
-                "FROM"]
-        }
-        BIASED = {"regex": REGEX, "replacement": REPLACEMENT, "SQL": QUERY}
-        self.all_bias = BIASED
+        self.all_bias = self.BIASED
     
     @monitor_time
-    def find_fn_name(
-            self,
-            temperature: float=0.7) -> None:
+    def find_fn_name(self) -> None:
+        """use constrained decoding to find the name corresponding to the print
+        Returns:
+            None: is used to set the internal value, no output is needed
+        """
         allowed: list[str] = [str(item.get("name")) for item in self.func_data if "name" in item]
         base_prompt = (
             "You are a strict function router.\n"
@@ -132,22 +134,30 @@ B. How to fix it<|im_end|>
         "- Regex can do a lot of thing dont hesitate to chose it"
         "- Return the function name ONLY if it clearly and exactly matches the user request.\n"
         "- If there is any ambiguity, mismatch, or missing function, return 'None'.\n"
-        "- Most requests do NOT match any function.\n"
-            )
+        "- Most requests do NOT match any function.\n")
         post_prompt = "Function router:"
         if self.prompt.strip():
             self.function_name = phrase_only_rd(
                 base_prompt + self.prompt + post_prompt,
                 allowed,
                 self.llm,
-                temperature,
+                0.7,
                 acceptable_margin=0.2, max_token=True)
         else:
             self.function_name = "None"
 
     @monitor_time
-    def get_param(self) -> None:
-        MAX_TRY = 3
+    def get_param(self, max_try: int=3) -> None:
+        """use constrained decoding to 
+        find all argument value using the function definition and the prompt
+
+        Args:
+            max_try (int, optional): _description_. Defaults to 3.
+            max number of attempt if wrong result is detected
+        Returns:
+            None: is used to set the internal value, no output is needed
+        """
+        
         if self.function_name == "None":
             return
         try:
@@ -169,13 +179,13 @@ B. How to fix it<|im_end|>
             )
             retry_context = ""
             i = 0
-            for i in range(MAX_TRY):
+            for i in range(max_try):
                 full_prompt = base_prompt + retry_context + ("<|im_start|>assistant\n" if param_type != "string" else "parameter value:")
 
                 param_try = self.set_param(param_type, param_name, full_prompt, random=bool(retry_context))
                 if self.judge_param(param_try, param_name, func):
                     break
-                if i < MAX_TRY - 1:
+                if i < max_try - 1:
                     print(f"temporary result : {param_try}")
                     print("retriying..\033[5m.\033[0m")
                     act_rompt = self.COMMENTARY_PROMPT.format(
@@ -193,7 +203,17 @@ B. How to fix it<|im_end|>
             self.parameter[param_name] = param_try
             print(f"validated parameter |{param_name}| to be |{param_try}|")
             
-    def judge_param(self, param_value: Any, param_name: str, func) -> bool:
+    def judge_param(self, param_value: Any, param_name: str, func: dict) -> bool:
+        """use all context available to detect obvious error in llm output
+
+        Args:
+            param_value (Any): cadidate value being tested
+            param_name (str): name of the param being filled
+            func (dict): dictionary containing all function info
+
+        Returns:
+            bool: true by default, false if any obvious error are detected
+        """        
         if param_value is None:
             return False
         judge_prompt = f"""
@@ -231,6 +251,17 @@ respond with :
                   param_name: str,
                   full_prompt: str,
                   random: bool=False) -> str | bool | int | float | None:
+        """_summary_
+
+        Args:
+            param_type (str): type of data the parameter will be, used to choose correct llm restraining function
+            param_name (str): name of the param being set
+            full_prompt (str): prompt that will be used by the llm
+            random (bool, optional): weither the decoding sshould use argmax or weighted probability. Defaults to False.
+
+        Returns:
+            str | bool | int | float | None: the value found by the llm, none only in case of error
+        """        
         result: str | None | float | int | bool = None
         if param_type == "number":
             numbers_in_prompt = [x for x in extract_numbers(self.prompt, allow_float=True) if float(x) not in self.parameter.values()]
@@ -301,6 +332,14 @@ respond with :
         return result
 
     def to_dict(self) -> dict:
+        """little helper to pack important info in a dict
+
+        Returns:
+            dict: a short dict with following entries:
+            "prompt": the original prompt the llm was asked
+            "func_name": the name of the function
+            "parameters": a dict containing all parameter name and value
+        """        
         return {
             "prompt": self.prompt,
             "func_name": self.function_name,

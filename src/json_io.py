@@ -34,6 +34,17 @@ class Prompt(BaseModel):
         extra = "forbid"
 
 def get_func_def(input_path: str) -> list[dict]:
+    """open the path in argument read it, and verify each function has correct format
+
+    Args:
+        input_path (str): path to function definition
+
+    Raises:
+        various raises due to file managing and value verification by pydantic
+
+    Returns:
+        list[dict]: all found function in form of a list of dict (function)
+    """    
     with open(input_path, "r") as f:
         functions = json.load(f)
     if not isinstance(functions, list):
@@ -41,6 +52,17 @@ def get_func_def(input_path: str) -> list[dict]:
     return [FunctionDef(**func).model_dump() for func in functions]
 
 def get_prompt(input_path: str) -> list[str]:
+    """open the path in argument read it, and verify each prompt has correct format
+
+    Args:
+        input_path (str): path to prompt list
+
+    Raises:
+        various raises due to file managing and value verification by pydantic
+
+    Returns:
+        list[dict]: all found prompt in form of a list of dict (prompt)
+    """    
     with open(input_path, "r") as f:
         data = json.load(f)
     if not isinstance(data, list):
@@ -49,12 +71,18 @@ def get_prompt(input_path: str) -> list[str]:
 
 
 def generate_json_output(output: list[dict[str, Any]], output_path: str) -> None:
+    """uses json.dump on a list of dict formated to the subject demand.
+    all of that at the specified output path
+
+    Args:
+        output (list[dict[str, Any]]): list containing all function info needed in the oupout
+        output_path (str): where to write the output file
+    """    
     data = [{
             "prompt": dic["prompt"],
             "name":  dic["func_name"],
             "parameters": dic["parameters"]
         } for dic in output]
-
     Path(output_path).parent.mkdir(parents=True, exist_ok=True)
     with open(output_path, "w") as f:
         json.dump(data, f, indent=2)
