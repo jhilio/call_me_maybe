@@ -66,19 +66,15 @@ Fill the parameter according to function definition and the user request.<|im_en
     ),
     "string": ("""
 <|im_start|>system
-You extract string parameters for function calls.
+You are a function calling LLM and your task is to write the parameter value of a function depending on user input
 
-<tools>
-{func}
-</tools>
+function definition : {func[description]}
 Param_state: {param_state}
-Parameter: {param_name}
-Type: string
+Parameter you are filling: {param_name}
 
 Rules:
-- Do NOT apply the function.
-- Do NOT repeat previous parameter values.
-- Verify that you value match both user request and function description<|im_end|>
+- DO NOT execute the function.
+- Do NOT repeat previous parameter values.<|im_end|>
 <|im_start|>user
 {prompt}<|im_end|>
 """
@@ -102,7 +98,6 @@ Explain consisely (30 to 50 character):
 A. Why it's invalid
 B. How to fix it<|im_end|>
 <|im_start|>assistant
-<think> okay after a bit of thinking the problem is "</think>"
 """
                     )
     def __init__(self, llm: MyLLM, func_data: list[dict], prompt: str):
@@ -112,8 +107,8 @@ B. How to fix it<|im_end|>
         self.func_data = func_data
         self.prompt = prompt
         REGEX = {
-            "vowels": ["[aeiou]\n"],
-            "numbers": ["-?\\d+"]
+            "vowels": ["[aeiou]\n\n"],
+            "numbers": ["-?\\d+\n\n"]
         }
         REPLACEMENT = {
             "asterisk": ["*\n"],
@@ -164,6 +159,7 @@ B. How to fix it<|im_end|>
             self.parameter = {}
             return
         param_schema = func.get("parameters", {})
+        self.parameter = {a: "" for a in param_schema}
         for param_name, param_info in param_schema.items():
             param_type = param_info.get("type", "string")
 
@@ -266,12 +262,18 @@ respond with :
             boosted = []
             focus = {
                     self.prompt: 1.2,
+                    "  ".join(self.function_name.split("_-")): 0.4,
                     self.function_name: 0.4,
                     self.function_name.lower(): 0.4,
                     param_name: 0.1,
-                    "|".join(self.parameter.values()): 0.1, 
+                    # "  ".join([v for k, v in self.parameter.items()]): 0.01, 
+                    " Okay": 0.5,
+                    " okay": 0.5,
+                    "Okay": 0.5,
+                    "okay": 0.5,
                     param_name.lower(): 0.1
                 }
+            # print (focus)
             for name, bias in self.all_bias.items():
                 if param_name == name:
                     for k, v in bias.items():

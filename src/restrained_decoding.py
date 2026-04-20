@@ -1,9 +1,7 @@
-
-from idna import encode
+from torch import logit
 
 from llm_interaction import MyLLM
-from llm_sdk import Small_LLM_Model
-from math import exp, sqrt
+from math import exp
 from utils import monitor_time
 import random
 import re
@@ -108,7 +106,7 @@ def param_fill_rd(
             logits[token_id] *= boost_value
         
         if boost_tokens:
-            boost_strength = 20
+            boost_strength = 35
             for phrase in boost_tokens:
                 if not current_output:
                     logits[phrase[0]] += boost_strength
@@ -123,6 +121,14 @@ def param_fill_rd(
                             logits[next_token] += boost_strength
                         if verbose:
                                 print(f"={current_text}=, boost {llm.decode(next_token)}")
+        logits[llm.encode("<think>").tolist()[0][0]] = float("-inf")
+        logits[llm.encode("</think>").tolist()[0][0]] = float("-inf")
+        if not current_output:
+            logits[llm.encode("\n").tolist()[0][0]] = float("-inf")
+            logits[llm.encode("\n\n").tolist()[0][0]] = float("-inf")
+            logits[llm.encode("\n\n\n").tolist()[0][0]] = float("-inf")
+            logits[llm.encode("<|endoftext|>").tolist()[0][0]] = float("-inf")
+            logits[llm.encode("<|im_end|>").tolist()[0][0]] = float("-inf")
         if max_token:
             next_token = logits.index(max(logits))
         else:
@@ -131,8 +137,14 @@ def param_fill_rd(
             next_token = random.choices(population=list(range(len(logits))), weights=weights)[0]
         current_output.append(next_token)
         current_text = llm.decode(current_output)
-        if (quote :=find_closing_quote_in_text(current_text))[0] or "\n" in current_text or "<|im_end|>" in current_text:
-            current_text.removesuffix("<|im_end|>")
+        if ((quote :=find_closing_quote_in_text(current_text))[0]
+                or "\n\n" in current_text
+                or "<|im_end|>" in current_text
+                or "<|endoftext|>" in current_text):
+            current_text = current_text.replace("<|im_start|>", "")
+            current_text = current_text.replace("<|im_end|>", "")
+            current_text = current_text.replace("<|endoftext|>", "")
+            current_text.strip("\n")
             if verbose:
                 print(f"break with {current_text}, {quote=}")
             if quote[0]:
@@ -150,7 +162,6 @@ def restrained_decoding_number(
     allowed_token_seqs = [llm.encode(t).tolist()[0] for t in allowed_numbers]
     input_token = llm.encode(prompt).tolist()[0]
     current_output: list[int] = []
-    print(allowed_numbers)
     while (allowed_next := get_compatible_next_tokens(current_output, allowed_token_seqs)):
         input_ids = input_token + current_output
         logits = llm.llm.get_logits_from_input_ids(input_ids)
@@ -181,8 +192,8 @@ def free_commentary(
     """
     # print(prompt)
     input_ids = llm.encode(prompt).tolist()[0]
-    current_output: list[int]= []
-    current_text = ""
+    current_output: list[int]= llm.encode("A. the problem").tolist()[0]
+    current_text = "A. the problem"
     focus_ids: dict[int,float] = {}
     # compute bias tokens only from focus_text
     for text, value in focus_text.items():
@@ -195,8 +206,14 @@ def free_commentary(
             logits[token_id] *= boost_value
         for i, token in enumerate(current_output): # dont repeat rule
             logits[token] *= (0.85 * (i / len(current_output)))
-        # deterministic argmax
         logits[llm.encode("<think>").tolist()[0][0]] = float("-inf")
+        logits[llm.encode("</think>").tolist()[0][0]] = float("-inf")
+        if not current_output:
+            logits[llm.encode("\n").tolist()[0][0]] = float("-inf")
+            logits[llm.encode("\n\n").tolist()[0][0]] = float("-inf")
+            logits[llm.encode("\n\n\n").tolist()[0][0]] = float("-inf")
+            logits[llm.encode("<|endoftext|>").tolist()[0][0]] = float("-inf")
+            logits[llm.encode("<|im_end|>").tolist()[0][0]] = float("-inf")
         if max_token:
             next_token = logits.index(max(logits))
         else:
@@ -205,9 +222,11 @@ def free_commentary(
             next_token = random.choices(population=list(range(len(logits))), weights=weights)[0]
         current_output.append(next_token)
         current_text = llm.decode(current_output)
-        if "<|im_end|>" in current_text:
+        if "<|im_end|>" in current_text or "<|endoftext|>" in current_text:
             current_text.removesuffix("<|im_end|>")
+            current_text = current_text.replace("<|endoftext|>", "")
             break
+    # print(current_output, current_text)
     return current_text
 
 
