@@ -1,5 +1,3 @@
-from torch import logit
-
 from llm_interaction import MyLLM
 from math import exp
 from utils import monitor_time
