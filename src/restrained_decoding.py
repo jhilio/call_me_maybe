@@ -40,6 +40,7 @@ def phrase_only_rd(
         acceptable_margin: float = 0.5,
         max_token: bool = False,
         verbose: bool = False) -> str:
+    print(prompt)
     allowed_token_ids = [llm.encode(s).tolist()[0] for s in allowed]
     input_token = llm.encode(prompt).tolist()[0]
     current_output: list[int] = []

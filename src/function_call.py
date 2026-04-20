@@ -99,6 +99,7 @@ Explain consisely (30 to 50 character):
 A. Why it's invalid
 B. How to fix it<|im_end|>
 <|im_start|>assistant
+
 """)
     REGEX = {
         "vowels": ["[aeiou]\n\n"],
@@ -133,16 +134,19 @@ B. How to fix it<|im_end|>
         """
         allowed: list[str] = [
             str(item.get("name")) for item in self.func_data if "name" in item]
-        base_prompt = ("""
+        base_prompt = (f"""
 You are a strict function router.
 Your job is to select the correct function from the list below.
 
 {str(self.func_data)}
 
 Rules:
-- Regex can do a lot of thing dont hesitate to chose it
+- Regex can do a lot of thing dont hesitate to chose it\
+- Return the function name ONLY if it clearly and exactly \
+matches the user request.
 - If there is any ambiguity, mismatch, or missing function, return 'None'.
 - Most requests do NOT match any function.
+
 """)
         post_prompt = "Function router:"
         if self.prompt.strip():
