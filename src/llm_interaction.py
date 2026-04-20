@@ -1,21 +1,28 @@
+from llm_sdk import Small_LLM_Model
 from utils import monitor_time
 import json
 import torch
 from torch import Tensor
 import regex as re
 import unicodedata
+from typing import List, Tuple, Union
+
+
 class MyLLM:
-    def __init__(self, llm):
+    def __init__(self, llm: Small_LLM_Model):
         self.llm = llm
 
-        self.byte_encoder = self.bytes_to_unicode()
-        self.byte_decoder = {v: k for k, v in self.byte_encoder.items()}
+        self.byte_encoder: dict[int, str] = self.bytes_to_unicode()
+        self.byte_decoder: dict[str, int] = {
+            v: k for k, v in self.byte_encoder.items()}
         # -----------------------------
         # Regex from tokenizer.json
         # -----------------------------
         self.ansi_regex = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
-        self.pattern = re.compile(r"(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\r\n\p{L}\p{N}]?\p{L}+|\p{N}| ?[^\s\p{L}\p{N}]+[\r\n]*|\s*[\r\n]+|\s+(?!\S)|\s+"
-        )
+        self.pattern = re.compile(
+            r"(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\r\n\p{L}\p{N}]?\p{L}+|\p{N}|"
+            r" ?[^\s\p{L}\p{N}]+[\r\n]*|\s*[\r\n]+|\s+(?!\S)|\s+"
+            )
         # -----------------------------
         # Load tokenizer JSON
         # -----------------------------
@@ -43,11 +50,11 @@ class MyLLM:
 
         self.merges = {tuple(m.split()): i for i, m in enumerate(merges)}
 
-
     # =========================================================
     # BYTE LEVEL (HF equivalent)
-    def bytes_to_unicode(self):
-        bs = list(range(33, 127)) + list(range(161, 173)) + list(range(174, 256))
+
+    def bytes_to_unicode(self) -> dict[int, str]:
+        bs = list(range(33, 127)) + list(range(161, 256))
         cs = bs[:]
 
         n = 0
@@ -57,9 +64,9 @@ class MyLLM:
                 cs.append(256 + n)
                 n += 1
 
-        cs = [chr(c) for c in cs]
-        print(bs, "\n", cs)
-        return dict(zip(bs, cs))
+        res = [chr(c) for c in cs]
+        # print(bs, "\n", cs)
+        return dict(zip(bs, res))
 
     def byte_level_encode(self, text: str) -> str:
         return "".join(self.byte_encoder[b] for b in text.encode("utf-8"))
@@ -71,7 +78,8 @@ class MyLLM:
     # =========================================================
     # SPECIAL TOKEN MATCHING (HIGHEST PRIORITY)
     # =========================================================
-    def split_special_tokens(self, text: str):
+    def split_special_tokens(
+            self, text: str) -> List[Tuple[bool, Union[str, int]]]:
         """
         Returns list of:
         (is_special: bool, value: str | int)
@@ -100,15 +108,18 @@ class MyLLM:
     # =========================================================
     # GROUP NORMAL TEXT INTO STRINGS
     # =========================================================
-    def group_text(self, spans):
+    def group_text(
+            self, spans: List[Tuple[bool, Union[str, int]]]
+            ) -> List[Tuple[bool, Union[str, int]]]:
         """
         merges consecutive normal chars into strings
         keeps special tokens separate
         """
-        out = []
-        buffer = ""
+        out: List[Tuple[bool, Union[str, int]]] = []
+        buffer: str = ""
         for is_special, val in spans:
             if not is_special:
+                assert isinstance(val, str)
                 buffer += val
             else:
                 if buffer:
@@ -123,13 +134,14 @@ class MyLLM:
     # =========================================================
     # NORMAL TOKENIZATION PIPELINE (regex + bytelevel)
     # =========================================================
-    def normal_tokenize(self, text: str):
+    def normal_tokenize(self, text: str) -> list[str]:
         text = text.replace("\u00a0", " ")
         return [self.byte_level_encode(p) for p in self.pattern.findall(text)]
     # =========================================================
     # BPE MERGE
     # =========================================================
-    def bpe(self, tokens: list[str]) -> list[str]:
+
+    def bpe(self, tokens: List[str]) -> List[str]:
         while True:
             best_pair = None
             best_rank = float("inf")
@@ -154,15 +166,16 @@ class MyLLM:
     # =========================================================
     # FULL TOKENIZATION
     # =========================================================
-    def tokenize(self, text: str):
+    def tokenize(self, text: str) -> List[int]:
         spans = self.split_special_tokens(text)
         grouped = self.group_text(spans)
-        output = []
+        output: List[int] = []
         for is_special, val in grouped:
             if is_special:
+                assert isinstance(val, int)
                 output.append(val)  # already token id
                 continue
-
+            assert isinstance(val, str)
             for part in self.normal_tokenize(val):
                 tokens = list(part)
                 merged = self.bpe(tokens)
@@ -172,32 +185,32 @@ class MyLLM:
     # =========================================================
     # ENCODE
     # =========================================================
-    def clean_ansi(self, text: str):
-        return self.ansi_regex.sub('', text)
+    def clean_ansi(self, text: str) -> str:
+        result: str = self.ansi_regex.sub('', text)
+        return result
 
     @monitor_time
     def encode(self, text: str) -> Tensor:
         text = unicodedata.normalize("NFC", text)
         text = self.clean_ansi(text)
         text1 = torch.tensor([self.tokenize(text)], dtype=torch.long)
+        text2 = self.llm.encode(text)
+        if str(text1.tolist()) != str(text2.tolist()):
+            print(f"""error 1:
+\033[30m{text}\033[0m
+\033[31m{text1}\033[0m
+\033[32m{text2}\033[0m""")
+            print(f"""
+O \033[31m|{"|".join(self.decode([a]) for a in text1.tolist()[0])}\033[0m
+# \033[32m|{"|".join(self.decode([a]) for a in text2.tolist()[0])}\033[0m
+""")
         return text1
 
     # =========================================================
     # DECODE
     # =========================================================
-    def decode(self, ids: list[int] | Tensor) -> str:
+    def decode(self, ids: Union[List[int], Tensor]) -> str:
         if isinstance(ids, Tensor):
             ids = ids.tolist()[0]
         return self.byte_level_decode(
             "".join(self.id_to_token[i] for i in ids))
-
-#         text2 = self.llm.encode(text)
-#         if str(text1.tolist()) != str(text2.tolist()):
-#             print(f"""error 1:
-# \033[30m{text}\033[0m
-# \033[31m{text1}\033[0m
-# \033[32m{text2}\033[0m""")
-#             print(f"""
-# O \033[31m|{"|".join(self.decode([a]) for a in text1.tolist()[0])}\033[0m
-# # \033[32m|{"|".join(self.decode([a]) for a in text2.tolist()[0])}\033[0m
-# """)

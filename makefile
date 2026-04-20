@@ -19,10 +19,10 @@ clean:
 	rm -rf .mypy_cache
 
 debug:
-	$(PYTHON) -m pdb src/a_maze_ing.py "config.txt"
+	$(PYTHON) -m pdb src
 
 lint:
-	$(FLAKE8) . --exclude=lib
+	$(FLAKE8) src
 	$(MYPY) src \
 	--warn-return-any --warn-unused-ignores --ignore-missing-imports \
 	--disallow-untyped-defs --check-untyped-defs
