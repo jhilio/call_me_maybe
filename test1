@@ -1,0 +1,13 @@
+Function: fn_substitute_string_with_regex
+Description: Replace all occurrences matching a regex pattern in a string.
+Param_state: {'source_string': 'cat', 'regex': '', 'replacement': ''}
+Parameter: regex
+Type: string
+Request: |[31mSubstitute the word 'cat' with 'dog' in 'The cat sat on the mat with another cat'[0m|
+
+Rules :
+   Do NOT apply the function.
+   Do NOT repeat previous parameter values.
+   Finish your response by a new line.
+
+"

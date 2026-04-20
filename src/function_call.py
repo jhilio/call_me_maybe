@@ -64,20 +64,17 @@ Fill the parameter according to function definition and the user request.<|im_en
 {prompt}<|im_end|>
 """
     ),
-    "string": ("""
-<|im_start|>system
-You are a function calling LLM and your task is to write the parameter value of a function depending on user input
-
-function definition : {func[description]}
-Param_state: {param_state}
-Parameter you are filling: {param_name}
-
-Rules:
-- DO NOT execute the function.
-- Do NOT repeat previous parameter values.<|im_end|>
-<|im_start|>user
-{prompt}<|im_end|>
-"""
+    "string": (
+        "Function: {func[name]}\n"
+        "Description: {func[description]}\n"
+        "Param_state: {param_state}\n"
+        "Parameter: {param_name}\n"
+        "Type: string\n"
+        "Request: |\33[31m{prompt}\33[0m|\n\n"
+        "Rules :\n"
+        "   Do NOT apply the function.\n"
+        "   Do NOT repeat previous parameter values.\n"
+        "   Finish your response by a new line.\n\n"
     ),
 }
     COMMENTARY_PROMPT = ("""
@@ -159,7 +156,7 @@ B. How to fix it<|im_end|>
             self.parameter = {}
             return
         param_schema = func.get("parameters", {})
-        self.parameter = {a: "" for a in param_schema}
+        # self.parameter = {a: "" for a in param_schema}
         for param_name, param_info in param_schema.items():
             param_type = param_info.get("type", "string")
 
@@ -173,13 +170,14 @@ B. How to fix it<|im_end|>
             retry_context = ""
             i = 0
             for i in range(MAX_TRY):
-                full_prompt = base_prompt + retry_context + "<|im_start|>assistant\n"
+                full_prompt = base_prompt + retry_context + ("<|im_start|>assistant\n" if param_type != "string" else "parameter value:")
 
                 param_try = self.set_param(param_type, param_name, full_prompt, random=bool(retry_context))
                 if self.judge_param(param_try, param_name, func):
                     break
                 if i < MAX_TRY - 1:
                     print(f"temporary result : {param_try}")
+                    print("retriying..\033[5m.\033[0m")
                     act_rompt = self.COMMENTARY_PROMPT.format(
                             param_try=param_try, param_name=param_name, func=func,prompt=self.prompt, param_state=self.parameter)
                     retry_context = "advice from previous attempt : \n" + free_commentary(
@@ -191,7 +189,7 @@ B. How to fix it<|im_end|>
                         max_token=False,
                         max_len=40
                     ).strip("\n") + "\n\n"
-                    print(f"\n\n{retry_context=}")
+                    # print(f"\n\n{retry_context=}")
             self.parameter[param_name] = param_try
             print(f"validated parameter |{param_name}| to be |{param_try}|")
             
@@ -291,12 +289,14 @@ respond with :
                 )
             result = value_output.strip(" \n")
             while result:
+                result = result.strip(" \n")
                 if (result[0] == '"' or final_prompt[-1] == '"') and result[-1] == '"':
                     result = result.strip('"')
                 elif (result[0] == "'" or final_prompt[-1] == "'") and result[-1] == "'":
                     result = result.strip("'")
                 else:
                     break
+            result = result.strip(" \n")
 
         return result
 
