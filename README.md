@@ -1,70 +1,72 @@
 *This project has been created as part of the 42 curriculum by aspenle*
 
-
 # Call_me_maybe
 
 ## Description
-    this is a small function calling system using qwen3 to format demand into function call
+This is a small function-calling system using Qwen3 to format demands into function calls.
 
-    - **Goal:** transform human writen text into strictly formated function code.
-    - **Overview:** read files as input to know which function is at disposition and a list of promt to test, with constrained decoding the program forces qwen3 to respond only with valid function name, then with help of the prompt and function description it fills in the argument.
+- **Goal:** transform human written text into strictly formatted function call.
+- **Overview:** read files as input to know which functions are available, and a list of prompts to test. With constrained decoding, the program forces Qwen3 to respond only with a valid function name, then, with the help of some prompt and function description, it fills in the arguments.
 
 ## Instructions
-    use uv sync or make install to install all dependencies.
+Use `uv sync` or `make install` to install all dependencies.
 
-    Then launch with:
-    uv python run src [option]
-    or make run
+Then launch with:
+```bash
+uv python run src [option]
+```
 
-    available option are : 
-    --functions_definition func_def_path to data/input/functions_definition.json
-    --input your_prompt_list_file_path : default to data/input/function_calling_tests.json
-    --output output_file_path : default to data/output/function_calling_results.json
+or
+```bash
+make run
+```
 
-bonus:
---show_time display metrics about execution time at end of program
+Available options:
+- `--functions_definition func_def_path` → default: `data/input/functions_definition.json`
+- `--input your_prompt_list_file_path` → default: `data/input/function_calling_tests.json`
+- `--output output_file_path` → default: `data/output/function_calling_results.json`
+
+Bonus:
+- `--show_time` displays execution time metrics at the end of the program
 
 ## Resources
-    all type of thing on the internet, and a bit of qwen documentation:
-    https://qwen.readthedocs.io/en/latest/
-    AI was used mainly as search engine, it did not produce any untouched copy pasted code althought it helped a lot for the recreation of the encoder
+All kinds of things on the internet, and a bit of Qwen documentation:
+https://qwen.readthedocs.io/en/latest/
 
+AI was used mainly as a search engine; it did not produce any directly copy-pasted code, although it helped a lot with the reconstruction of the encoder.
 
+## Algorithm explanation
+1. First, I task the model with selecting the corresponding function.  
+   To do that, I list all valid tokens that could start or continue at least one function name.  
+   Then I take the most likely candidate and repeat until a full function name is created.
 
-##  Algorithm explanation
-    1.
-    first i task the Model to the corresponding function, 
-    to do that i list all valid token that would start or continue at least 1 function name
-    then take the most likely candidate and redo it again until a full function name is created
-    2.
-    i then with the help of function description and parameter name/type, prompt the model with a lot of tweaking of logits value (boost token present in prompt, nerf the function name and parameter name ect)
-    3. another system that i made is after discovering a candidate to a parameter, i test it with some harcoded test + the model judge its own creation, if any test fail it will comment on the failure and retry to generate argument with as context its own comment
+2. Then, with the help of the function description and parameter names/types, I prompt the model with heavy tweaking of logits values (boost tokens present in the prompt, nerf function names and parameter names, etc.).
+
+3. Another system I made is that after discovering a candidate for a parameter, I test it with some hardcoded tests + the model judges its own creation. If any test fails, it comments on the failure and retries generating arguments using its own comment as context.
 
 ## Design decisions
-    i decided to keep everything simple, One big class FunctionCall will handle generating its argument with the help of function from 'restrained_decoding.py'
-    the main simply read argument then read input file to setup the big loop iterating over all test prompt, program simply finish with creating the output file with all gathered data.
+I decided to keep everything simple. One big class `FunctionCall` handles generating its arguments with the help of functions from `restrained_decoding.py`.
+
+The main script simply reads arguments, then reads the input file to set up the main loop iterating over all test prompts. The program finishes by creating the output file with all gathered data.
 
 ## Performance analysis
-    after a lot of tweaking in promt and logits bias, i think i achieved a relativily correct accuracy and the only speed problem can ocur if a lot of parameter candidate are judged not good multiple times in a row which is pretty rare so the speed should not be a problem
-
+After a lot of tweaking in prompts and logits bias, I think I achieved relatively good accuracy. The only speed problem can occur if many parameter candidates are judged invalid multiple times in a row, which is rare, so performance should not be a problem.
 
 ## Challenges faced
-    a lot of them but the biggest one was knowing when to finish generating text when a string parameter forces me to let the model generate on its own, to solve this problem i found not one but multiple solution that works well together.
-    Solution :
-    1.
-    in the prompt i tell the model to finish with empty lines, if i detect that i end generation
-    2.
-    i end the prompt with a quote, if the model terminate the quote, i end generation
-    3.
-    if the llm create a <|im_end|> or <|end_of_text|> token i end generation
+A lot of them, but the biggest one was knowing when to stop generating text when a string parameter forces the model to generate freely. To solve this problem, I found multiple solutions that work well together.
 
-    with theses 3 end condition the llm is pretty good at telling when its work is done
+### Solutions
+1. In the prompt, I tell the model to finish with empty lines; if detected, I stop generation.
+2. I start the prompt with a quote if the model terminates the quote, I stop generation.
+3. If the LLM generates a `<|im_end|>` or `<|end_of_text|>` token, I stop generation.
 
+With these three end conditions, the LLM is quite good at knowing when its work is done.
 
 ## Testing strategy
-    i continuously run the program with given test exercice and promt of my own and sometimes function of my own
-
+I continuously run the program with given test exercises and prompts of my own, and sometimes with functions I created myself.
 
 ## Example usage
-    uv sync
-    uv run python src [flag for file emplacement if necessary]
+```bash
+uv sync
+uv run python src [flag for file emplacement if necessary]
+```
