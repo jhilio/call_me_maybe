@@ -6,8 +6,14 @@ import re
 
 
 def find_closing_quote_in_text(decoded_text: str) -> tuple[bool, int]:
-    """
-    Returns True if a quote is followed by a space or newline.
+    """search for closing quote and return a tuple containing\
+    (has_found, pos_of_quote)
+
+    Args:
+        decoded_text (str): text where the quote is searcheds
+
+    Returns:
+        tuple[bool, int]: (has_found, pos_of_quote)
     """
     for match in re.finditer(r"[\"']", decoded_text):
         idx = match.end()  # position right after the quote
@@ -20,7 +26,16 @@ def find_closing_quote_in_text(decoded_text: str) -> tuple[bool, int]:
 def get_compatible_next_tokens(
         current_output: list[int],
         allowed_token_phrases: list[list[int]]) -> list[int]:
-    # returns set of token IDs allowed as the next token
+    """return a list of valid token to continue at least of\
+     'allowed_token_phrases'
+    Args:
+        current_output (list[int]):
+            used to know what was already writen
+        allowed_token_phrases (list[list[int]]):
+            list of token list that represent possible responses
+    Returns:
+        list[int]: list of available token
+    """
     compatible_next_tokens = set()
     len_output = len(current_output)
     for seq in allowed_token_phrases:
@@ -37,9 +52,32 @@ def phrase_only_rd(
         allowed: list[str],
         llm: MyLLM,
         temperature: float = 0.7,
-        acceptable_margin: float = 0.5,
+        acceptable_margin: float = 0.3,
         max_token: bool = False,
         verbose: bool = False) -> str:
+    """forces llm to respond with one of the allowed phrases
+
+    Args:
+        prompt (str):
+            prompt to give to the llm
+        allowed (list[str]):
+            list of allowed response
+        llm (MyLLM):
+            must suport encode/decode/.llm.get_logits_by_ids
+        temperature (float, optional):
+            temperature, only usefull if max_token_is false. Defaults to 0.7.
+        acceptable_margin (float, optional):"
+            treshold of confidence at which it will returne "None". \
+        Defaults to 0.3.
+        max_token (bool, optional):
+            weither to chose the highest token or use all logits as weight.\
+         Defaults to False.
+        verbose (bool, optional):
+            debug mode with a few print of internal step. Defaults to False.
+
+    Returns:
+        str: one of the allowed response, "None" if confidence is too low
+    """
     allowed_token_ids = [llm.encode(s).tolist()[0] for s in allowed]
     input_token = llm.encode(prompt).tolist()[0]
     current_output: list[int] = []
@@ -78,15 +116,34 @@ def param_fill_rd(
         boost_tokens: list[list[int]] | None = None,
         max_token: bool = True,
         verbose: bool = False) -> str:
-    """
-    Extract text deterministically from LLM logits.
+    """let the llm relatively free to respond
 
     Args:
-        prompt: Full system/user prompt
-        llm: Your LLM object
-        max_len: Maximum tokens to decode
-        focus_text: Optional string to bias token selection toward
+        prompt (str):
+            prompt to give to the llm
+        llm (MyLLM):
+            must suport encode/decode/.llm.get_logits_by_ids
+        max_len (int):
+            maximum number of token to produce
+        focus_text (dict[str, float], optional):
+            each key in this dict will multiply its logit \
+        by its value to bias the. \
+        Defaults to {}.
+        boost_tokens (list[list[int]] | None, optional): \
+            Hard boost to all these token if the \
+        output perfectly match the start of the phrases. \
+        Defaults to None.
+        max_token (bool, optional):
+            weither to chose the highest token or use all logits as weight.\
+        Defaults to False.
+        verbose (bool, optional):
+            debug mode with a few print of internal step. \
+        Defaults to False.
+
+    Returns:
+        str: the llm response
     """
+
     input_ids = llm.encode(prompt).tolist()[0]
     current_output: list[int] = []
     current_text = ""
@@ -152,7 +209,16 @@ def restrained_decoding_number(
     allowed_numbers: list[str],
     llm: MyLLM,
 ) -> str:
+    """simplified version of phrase_only_rd
 
+    Args:
+        prompt (str): prompt to give to the llm
+        allowed_numbers (list[str]): list of allowed response
+        llm (MyLLM): must suport encode/decode/.llm.get_logits_by_ids
+
+    Returns:
+        str: str version of the number chosen
+    """
     allowed_token_seqs = [llm.encode(t).tolist()[0] for t in allowed_numbers]
     input_token = llm.encode(prompt).tolist()[0]
     current_output: list[int] = []
@@ -180,10 +246,14 @@ def free_commentary(
     Extract text deterministically from LLM logits.
 
     Args:
-        prompt: Full system/user prompt
-        llm: Your LLM object
-        max_len: Maximum tokens to decode
-        focus_text: Optional string to bias token selection toward
+        prompt (str): prompt to give to the llm
+        llm (MyLLM): must suport encode/decode/.llm.get_logits_by_ids
+        max_len:
+            maximum number of token to produce
+        focus_text (dict[str, float], optional):
+            each key in this dict will multiply its logit \
+        by its value to bias the. \
+        Defaults to {}.
     """
     # print(prompt)
     input_ids = llm.encode(prompt).tolist()[0]
@@ -221,8 +291,7 @@ def free_commentary(
         current_text = llm.decode(current_output)
         if "<|im_end|>" in current_text or "<|endoftext|>" in current_text:
             current_text.removesuffix("<|im_end|>")
-            current_text = current_text.replace("<|endoftext|>", "")
+            current_text.removesuffix("<|endoftext|>")
             current_text.strip()
             break
-    # print(current_output, current_text)
     return current_text

@@ -10,6 +10,11 @@ from typing import List, Tuple, Union
 
 class MyLLM:
     def __init__(self, llm: Small_LLM_Model):
+        """initialise and read llm file to setup everything
+
+        Args:
+            llm (Small_LLM_Model): original llm interface
+        """
         self.llm = llm
 
         self.byte_encoder: dict[int, str] = self.bytes_to_unicode()
@@ -54,6 +59,11 @@ class MyLLM:
     # BYTE LEVEL (HF equivalent)
 
     def bytes_to_unicode(self) -> dict[int, str]:
+        """used to create byte encoder
+
+        Returns:
+            dict[int, str]: byte_encoder dict
+        """
         bs = list(range(33, 127)) + list(range(161, 256))
         cs = bs[:]
 
@@ -111,9 +121,16 @@ class MyLLM:
     def group_text(
             self, spans: List[Tuple[bool, Union[str, int]]]
             ) -> List[Tuple[bool, Union[str, int]]]:
-        """
-        merges consecutive normal chars into strings
+        """merges consecutive normal chars into strings
         keeps special tokens separate
+
+        Args:
+            spans (List[Tuple[bool, Union[str, int]]]):
+                each group of pre_fusioned token
+
+        Returns:
+            List[Tuple[bool, Union[str, int]]]: \
+            list of (is_special, spec_tok| str)
         """
         out: List[Tuple[bool, Union[str, int]]] = []
         buffer: str = ""
@@ -135,6 +152,14 @@ class MyLLM:
     # NORMAL TOKENIZATION PIPELINE (regex + bytelevel)
     # =========================================================
     def normal_tokenize(self, text: str) -> list[str]:
+        """split the text into group using the llm regex_split
+
+        Args:
+            text (str): text to operate on
+
+        Returns:
+            list[str]: splited version
+        """
         text = text.replace("\u00a0", " ")
         return [self.byte_level_encode(p) for p in self.pattern.findall(text)]
     # =========================================================
@@ -142,6 +167,15 @@ class MyLLM:
     # =========================================================
 
     def bpe(self, tokens: List[str]) -> List[str]:
+        """uses the mergefile to merges pair of \
+        bytes together with special priority
+
+        Args:
+            tokens (List[str]): list of group of token to merges
+
+        Returns:
+            List[str]: merged version of the given token
+        """
         while True:
             best_pair = None
             best_rank = float("inf")
@@ -167,6 +201,14 @@ class MyLLM:
     # FULL TOKENIZATION
     # =========================================================
     def tokenize(self, text: str) -> List[int]:
+        """uses regex then bpe to reproduce original encode
+
+        Args:
+            text (str): text to operate on
+
+        Returns:
+            List[int]: token list produced
+        """
         spans = self.split_special_tokens(text)
         grouped = self.group_text(spans)
         output: List[int] = []
@@ -186,11 +228,27 @@ class MyLLM:
     # ENCODE
     # =========================================================
     def clean_ansi(self, text: str) -> str:
+        """remove all common ansi escape sequence from text
+
+        Args:
+            text (str): text to operate on
+
+        Returns:
+            str: str without their ansi escape sequence
+        """
         result: str = self.ansi_regex.sub('', text)
         return result
 
     @monitor_time
     def encode(self, text: str) -> Tensor:
+        """uses regex then bpe to reproduce original encode
+
+        Args:
+            text (str): text to encode
+
+        Returns:
+            Tensor: Tensor form of the list of token produced
+        """
         text = unicodedata.normalize("NFC", text)
         text = self.clean_ansi(text)
         text1 = torch.tensor([self.tokenize(text)], dtype=torch.long)
@@ -210,6 +268,14 @@ O \033[31m|{"|".join(self.decode([a]) for a in text1.tolist()[0])}\033[0m
     # DECODE
     # =========================================================
     def decode(self, ids: Union[List[int], Tensor]) -> str:
+        """transform token list back into str
+
+        Args:
+            ids (Union[List[int], Tensor]): input token list as list or tensor
+
+        Returns:
+            str: the decrypted version of all token put together
+        """
         if isinstance(ids, Tensor):
             ids = ids.tolist()[0]
         return self.byte_level_decode(
