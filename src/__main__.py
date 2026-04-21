@@ -3,7 +3,7 @@ from llm_interaction import MyLLM
 from json_io import generate_json_output, get_prompt, get_func_def
 from function_call import FunctionCall
 from argparse import ArgumentParser, Namespace
-from utils import monitor_time
+from utils import monitor_time, format_dict
 
 
 def get_input_path() -> Namespace:
@@ -14,17 +14,17 @@ def get_input_path() -> Namespace:
             filled with all path to the files specified at program launch
     """
     parser = ArgumentParser(exit_on_error=False)
-    parser.add_argument("--input_function",
+    parser.add_argument("--functions_definition",
                         help="the path to func definitions",
                         default="data/input/functions_definition.json",
                         required=False)
-    parser.add_argument("--input_prompt",
+    parser.add_argument("--input",
                         help="the path to prompt list",
                         default="data/input/function_calling_tests.json",
                         required=False)
-    parser.add_argument("--output_file",
+    parser.add_argument("--output",
                         help="where to write the output",
-                        default="data/output/output.txt",
+                        default="data/output/function_calling_results.json",
                         required=False)
     parser.add_argument("--show_time",
                         help="weither to show time at end of programe",
@@ -42,8 +42,8 @@ def main() -> bool:
     """
     try:
         path = get_input_path()
-        function_defs = get_func_def(path.input_function)
-        prompts_list = get_prompt(path.input_prompt)
+        function_defs = get_func_def(path.functions_definition)
+        prompts_list = get_prompt(path.input)
         llm = MyLLM(Small_LLM_Model())
     except Exception as error:
         print(error, "occured while initializing program")
@@ -58,8 +58,8 @@ def main() -> bool:
             future_json.append(act_call.to_dict())
         print("result :\n" + "\n\n".join("".join('\n'.join(
             [f'[{k} : {v}]' for k, v in dic.items()])) for dic in future_json))
-        generate_json_output(future_json, path.output_file)
-    except IOError as error:
+        generate_json_output(future_json, path.output)
+    except Exception as error:
         print(error, "occured while running program")
     return bool(path.show_time == "true")
 
@@ -68,11 +68,9 @@ if __name__ == "__main__":
     show_stat = main()
     if show_stat:
         stats = monitor_time.get_all_stats()
-        print(stats)
-    # for func, s in sorted(stats.items(), key=lambda m: m[1]["total_time"]):
-    #     if s["call_count"]:
-    #         avg = s["total_time"] / s["call_count"]
-    #         print(f"{func.__name__}, took a total of :\n\
-    #               {s['total_time']:.3f}\
-    #               sec, for {s['call_count']} call, with an average of \
-    #                 {avg:.3f}sec\n")
+        print("\n")
+        for k, v in format_dict(stats,
+                                *stats,
+                                sort_key=lambda stat: stat[1]["total_time"],
+                                value_filter=lambda stat: stat["call_count"]):
+            print(k, v)

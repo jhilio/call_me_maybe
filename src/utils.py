@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from time import perf_counter
-from typing import Any, Callable
+from typing import Any, Callable, Optional, Tuple
 from functools import update_wrapper
 
 
@@ -20,7 +20,7 @@ class stats_deco(ABC):
     def get_all_stats(cls) -> dict[str, dict[str, float]]:
         return cls.all_monitored
 
-    def __get__(self, instance, owner):
+    def __get__(self, instance: Any, owner: Any) -> Callable:
         if instance is None:
             return self
 
@@ -33,6 +33,11 @@ class stats_deco(ABC):
 
 
 class monitor_time(stats_deco):
+    def __init__(self, func: Callable):
+        super().__init__(func)
+        self._stats["total_time"] = 0
+        self._stats["call_count"] = 0
+
     def __call__(self, *args: Any, **kwargs: Any) -> Any:
         start = perf_counter()
         try:
@@ -46,27 +51,20 @@ class monitor_time(stats_deco):
                 "call_count", 0) + 1
 
 
-# def monitor_time(func: Optional[Callable] = None) -> Callable:
-#     if not hasattr(monitor_time, "stats"):
-#         monitor_time.stats = {}
-
-#     def decorator(f: Callable) -> Callable:
-#         monitor_time.stats[f] = {
-#             "total_time": 0.0,
-#             "call_count": 0,
-#         }
-
-#         @wraps(f)
-#         def wrapper(*args: tuple, **kwargs: dict) -> Any:
-#             start = perf_counter()
-#             try:
-#                 return f(*args, **kwargs)
-#             finally:
-#                 monitor_time.stats[f]["total_time"] += perf_counter() - start
-#                 monitor_time.stats[f]["call_count"] += 1
-#                 return None
-
-#         return wrapper
-#     if func is not None:
-#         return decorator(func)
-#     return decorator
+def format_dict(
+        main: dict,
+        *keys: Any,
+        sort: bool = True,
+        sort_key: Optional[Callable[[tuple[Any, Any]], Any]] = None,
+        reverse: bool = True,
+        value_filter: Optional[Callable[[Any], bool]] = None
+        ) -> Tuple[Tuple[Any, Any], ...]:
+    result: tuple[tuple[Any, Any], ...] = tuple(
+        (key, value)
+        for key in keys
+        if (value := main.get(key)) is not None
+        and (value_filter(value) if callable(value_filter) else True)
+    )
+    if sort:
+        result = tuple(sorted(result, key=sort_key, reverse=reverse))
+    return result

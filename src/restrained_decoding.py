@@ -40,7 +40,6 @@ def phrase_only_rd(
         acceptable_margin: float = 0.5,
         max_token: bool = False,
         verbose: bool = False) -> str:
-    print(prompt)
     allowed_token_ids = [llm.encode(s).tolist()[0] for s in allowed]
     input_token = llm.encode(prompt).tolist()[0]
     current_output: list[int] = []
@@ -66,9 +65,7 @@ def phrase_only_rd(
             if margin < acceptable_margin:
                 return "None"
             next_token = random.choices(list(allowed_next), weights=weights)[0]
-
         current_output.append(next_token)
-
     return llm.decode(current_output)
 
 
