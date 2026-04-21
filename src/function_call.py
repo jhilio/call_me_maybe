@@ -158,6 +158,7 @@ matches the user request.
                 acceptable_margin=0.2, max_token=True)
         else:
             self.function_name = "None"
+        print(f"\nvalidated function to be : {self.function_name}")
 
     @monitor_time
     def get_param(self, max_try: int = 3) -> None:
